@@ -17,6 +17,9 @@ The project utilizes of a wazuh-manager installed on WSL, allowing testing custo
 
 You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
 
+## Note
+
+Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copued the files. It is suggested to use a clear naming convention instead of these files. 
 
 ## Permissions
 

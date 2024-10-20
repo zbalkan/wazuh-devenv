@@ -138,3 +138,5 @@ dmypy.json
 # Project specific excludes
 *.db
 *.ini
+decoders/local_decoder.xml
+rules/local_rules.xml
