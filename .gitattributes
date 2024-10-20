@@ -27,3 +27,14 @@
 # with the python modules ``pickle``, ``dbm.*``,
 # ``shelve``, ``marshal``, ``anydbm``, & ``bsddb``
 # (among others).
+
+# Shell scripts require LF
+*.sh text eol=lf
+
+# Batch scripts require CRLF
+*.bat text eol=crlf
+
+# BatchPowershell scripts require CRLF
+*.ps1 text eol=crlf
+*.psd1 text eol=crlf
+*.psm1 text eol=crlf

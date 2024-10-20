@@ -2,36 +2,43 @@
 
 The project utilizes of a wazuh-manager installed on WSL, allowing testing custom rules locally before moving to production.
 
-# Setup
+## Setup
 
 1. Ensure a WSL instance running in your environment. The distribution that matches the Production deployment is better.
 2. Clone the repo to the preferred location for development.
-3. Install Wazuh server aka wazuh-manager on WSL.
-  1. Ignore the certificate creation and filebeat steps. We will not have an indexer.
-  2. Continue installing Wazuh server following the [official documentation](https://documentation.wazuh.com/current/installation-guide/wazuh-server/step-by-step.html).
-4. Update `/var/ossec/etc/ossec.conf/` with `<logall_json>yes</logall_json>` and `<log_format>plain,json</log_format>`. JSON is easier to work with.
-5. Copy the custom rules to the `rules` directory in the repository and fix the permissions:
+3. Run the script `sudo ./install.sh` to start installation.
+4. The script will ask you to copy rules and decoders to the new locations. When you copied them, hit `y` and continue. Otherwise it will rollback the changes.
+5. The script will ask you to provide the username you will use in wsl for development. Ensure you typed it correctly.
+6. The installation and configuration will be completed successfully. If there are any errors, there will be warnings for the user to fix manually.
+7. Initiate VS Code from the WSL for first engagement.
+8. You should be able to read and access rules from the repository. Add the rules and decoders folders to git.
+9. Remove the origin from Github to prevent accidentally leaking your rules to public repositories by running `git remote rm origin`.
+10. Add your organization's git repository for further use `git remote add origin <URL>`.
+
+You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
+
+
+## Permissions
+
+When you add new files, you must ensure the file permissions are set as expected. The expected permissions are `660` and owners are `wazuh:wazuh`. You can use this snippet belof whenever you need it for simplicity.
+
 ```shell
-  chown root:wazuh ./rules
-  chmod 770 ./rules
-  chown wazuh:wazuh ./rules/*
-  chmod 660 ./rules/*
+decoders_dir=$(realpath ./decoders)
+rules_dir=$(realpath ./rules)
+chown wazuh:wazuh "$rules_dir"/*
+chmod 660 "$rules_dir"/*
+chown wazuh:wazuh "$decoders_dir"/*
+chmod 660 "$decoders_dir"/*
 ```
-6. Remove custom rules  under `/var/ossec/etc/rules`.
-7. Copy the custom decoders to the `decoders` directory in the repository and fix the permissions
+
+If your filesystem supports ACLs, `setfacl` is a good helper. Using the commands, you can ensure the future files will use the correct permissions. Since it is not universal, this change is optional.
+
 ```shell
-chown root:wazuh ./decoders
-chmod 770 ./decoders
-chown wazuh:wazuh ./decoders/*
-chmod 660 ./decoders/*
+# Set default ACLs to enforce wazuh:wazuh ownership and 660 permissions for future files
+setfacl -d -m u:wazuh:rwx,g:wazuh:rwx "$decoders_dir"
+setfacl -d -m o::--- "$decoders_dir"
+
+# Set default ACLs to enforce wazuh:wazuh ownership and 660 permissions for future files
+setfacl -d -m u:wazuh:rwx,g:wazuh:rwx "$rules_dir"
+setfacl -d -m o::--- "$rules_dir"
 ```
-8. Remove custom decoders  under `/var/ossec/etc/decoders`.
-9. Create a mount point for decoders and rules by adding these lines below to `/etc/fstab`:
-```bash
-/path/to/wazuh-devenv/decoders /var/ossec/etc/decoders none bind 0 0
-/path/to/wazuh-devenv/rules /var/ossec/etc/rules none bind 0 0
-```
-10. Add your user to the wazuh group `sudo usermod -a -G wazuh <username>`, and verify `groups <username>`.
-11. Initiate VS Code from the WSL for first engagement.
-12. You should be able to read and access rules from the repository. Add the rules and decoders folders to git.
-13. You are ready to update and test your logs locally. You can combine into your CI/CD pipeline for deployment.

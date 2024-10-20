@@ -1,7 +1,7 @@
 
 
 import unittest
-from lib.logtest import send_log
+from internal.logtest import send_log
 
 class TestCustomSSHRules(unittest.TestCase):
 
@@ -12,7 +12,7 @@ class TestCustomSSHRules(unittest.TestCase):
         self.assertEqual(response.decoder, 'sshd')
         self.assertEqual(response.rule_description, 'sshd: authentication failed.')
         self.assertEqual(response.rule_id, '5760')
-        self.assertEqual(response.rule_level, '5')
+        self.assertEqual(response.rule_level, 5)
         self.assertEqual(response.get_data_field(['dstuser']), 'root')
         self.assertEqual(response.get_data_field(['srcport']), '56969')
         self.assertEqual(response.get_data_field(['srcip']), '112.85.42.146')
