@@ -23,7 +23,11 @@ Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git a
 
 ## Permissions
 
-When you add new files, you must ensure the file permissions are set as expected. The expected permissions are `660` and owners are `wazuh:wazuh`. You can use this snippet belof whenever you need it for simplicity.
+When you add new files, you must ensure the file permissions are set as expected. The expected permissions are `660` and owners are `wazuh:wazuh`.
+
+There are unit tests for file permissions to help the user. If the tests fail, you can check for the root cause and then fix the ownership and permissions.
+
+You can use this snippet below whenever you need it for simplicity. You will need `sudo` as the parent folder ownership is set as `root:wazuh`.
 
 ```shell
 decoders_dir=$(realpath ./decoders)
