@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
-
-import atexit
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
 import json
 import logging
 import socket
 import struct
-from typing import Optional, List
+from typing import Any, Final, Optional
 
 # The socket path is a constant since it's determined by Wazuh
-LOGTEST_SOCKET = '/var/ossec/queue/sockets/logtest'
+LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
 
 class WazuhDaemonProtocol:
     """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
@@ -121,7 +120,7 @@ class WazuhLogtest:
         Returns:
             dict: The response from the Wazuh daemon.
         """
-        data = self.fixed_fields.copy()
+        data: dict[str, Any] = self.fixed_fields.copy()
         if token:
             data['token'] = token
         data['event'] = log
@@ -140,7 +139,7 @@ class WazuhLogtest:
             self.last_token = new_token
         return reply
 
-    def remove_last_session(self):
+    def remove_last_session(self) -> None:
         """Remove the last session to clean up."""
         if self.last_token:
             self.remove_session(self.last_token)
@@ -154,7 +153,7 @@ class WazuhLogtest:
         Returns:
             bool: True if the session was removed successfully.
         """
-        data = self.fixed_fields.copy()
+        data: dict[str, Any] = self.fixed_fields.copy()
         data['token'] = token
         request = self.protocol.wrap('remove_session', data)
         try:
@@ -169,7 +168,7 @@ class WazuhLogtest:
 class LogtestResponse:
     """Represents the response from Wazuh logtest."""
 
-    def __init__(self, response_dict: dict):
+    def __init__(self, response_dict: dict) -> None:
         self.raw_response = response_dict
         # Extract error and data from the response
         self.error = response_dict.get('error', 0)
@@ -186,11 +185,11 @@ class LogtestResponse:
         self.rule_groups = self.rule.get('groups', [])
         self.parsed_data = self.output.get('data', {})
 
-    def get_data_field(self, field_path: List[str]) -> Optional[str]:
+    def get_data_field(self, field_path: list[str]) -> Optional[str]:
         """Retrieve nested data fields using a list of keys.
 
         Args:
-            field_path (List[str]): The path to the desired field.
+            field_path (list[str]): The path to the desired field.
 
         Returns:
             Optional[str]: The value of the field, or None if not found.
@@ -226,17 +225,17 @@ def send_log(log: str, location: str = "stdin", log_format: str = "syslog", toke
         logging.error('Error processing log: %s', e)
         raise
 
-def send_multiple_logs(logs: List[str], location: str = "stdin", log_format: str = "syslog", options: Optional[dict] = None) -> List[LogtestResponse]:
+def send_multiple_logs(logs: list[str], location: str = "stdin", log_format: str = "syslog", options: Optional[dict] = None) -> list[LogtestResponse]:
     """Send multiple logs to Wazuh logtest within the same session.
 
     Args:
-        logs (List[str]): A list of log messages to send.
+        logs (list[str]): A list of log messages to send.
         location (str): The location of the logs.
         log_format (str): The format of the logs.
         options (Optional[dict]): Additional options.
 
     Returns:
-        List[LogtestResponse]: A list of responses from Wazuh logtest.
+        list[LogtestResponse]: A list of responses from Wazuh logtest.
     """
     w_logtest = WazuhLogtest(location=location, log_format=log_format)
     if options is None:
