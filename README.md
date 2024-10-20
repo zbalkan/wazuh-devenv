@@ -42,3 +42,8 @@ setfacl -d -m o::--- "$decoders_dir"
 setfacl -d -m u:wazuh:rwx,g:wazuh:rwx "$rules_dir"
 setfacl -d -m o::--- "$rules_dir"
 ```
+
+
+## Sample rules
+
+The sample rules are taken from the Wazuh blog [Creating decoders and rules from scratch](https://wazuh.com/blog/creating-decoders-and-rules-from-scratch/).

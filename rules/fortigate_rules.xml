@@ -1,0 +1,14 @@
+<group name="custom,fortigate,">
+    <rule id="222000" level="3">
+    <decoded_as>fortigate-custom</decoded_as>
+    <description>Fortigate messages grouped.</description>
+    </rule>
+
+    <rule id="222016" level="4">
+    <if_sid>222000</if_sid>
+    <action>login</action>
+    <status>failed</status>
+    <description>Fortigate: Login failed.</description>
+    </rule>
+</group>
+

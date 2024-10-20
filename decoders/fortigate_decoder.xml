@@ -1,0 +1,33 @@
+<decoder name="fortigate-custom">
+  <prematch>^date=\d\d\d\d-\d\d-\d\d time=\d\d:\d\d:\d\d devname="\S+"</prematch>
+</decoder>
+
+<decoder name="fortigate-custom1">
+  <parent>fortigate-custom</parent>
+  <regex>^date=(\d\d\d\d-\d\d-\d\d) time=(\d\d:\d\d:\d\d) devname="(\S+)"</regex>
+  <order>date, time, devname</order>
+</decoder>
+
+<decoder name="fortigate-custom1">
+  <parent>fortigate-custom</parent>
+  <regex>devid="(\S+)" logid="(\S+)" type="(\S+) subtype="(\S+)"</regex>
+  <order>devid, logid, type, subtype</order>
+</decoder>
+
+<decoder name="fortigate-custom1">
+  <parent>fortigate-custom</parent>
+  <regex>srcip="(\S+)"|srcip=(\S+) </regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="fortigate-custom1">
+  <parent>fortigate-custom</parent>
+  <regex>dstip=(\S+) </regex>
+  <order>dstip</order>
+</decoder>
+
+<decoder name="fortigate-custom1">
+  <parent>fortigate-custom</parent>
+  <regex>action="(\S+)" </regex>
+  <order>action</order>
+</decoder>
