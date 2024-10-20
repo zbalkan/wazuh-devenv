@@ -5,6 +5,7 @@ import logging
 import socket
 import struct
 from typing import Any, Final, Optional
+from enum import Enum, auto
 
 # The socket path is a constant since it's determined by Wazuh
 LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
@@ -13,7 +14,7 @@ class WazuhDaemonProtocol:
     """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
 
     def __init__(self, version: int = 1, origin_module: str = "wazuh-logtest", module_name: str = "wazuh-logtest"):
-        self.protocol = {
+        self.protocol: dict[str, Any] = {
             'version': version,
             'origin': {
                 'name': origin_module,
@@ -49,7 +50,7 @@ class WazuhDaemonProtocol:
             ValueError: If the message cannot be decoded.
         """
         try:
-            json_msg = json.loads(msg.decode('utf-8'))
+            json_msg: Any = json.loads(msg.decode('utf-8'))
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to decode JSON response: {e}")
         if json_msg.get('error'):
@@ -61,7 +62,7 @@ class WazuhDaemonProtocol:
 class WazuhSocket:
     """Handles communication with the Wazuh socket (includes message framing)."""
 
-    def __init__(self, file: str):
+    def __init__(self, file: str) -> None:
         self.file = file
 
     def send(self, msg: str) -> bytes:
@@ -165,35 +166,64 @@ class WazuhLogtest:
             logging.error(f"Failed to remove session: {e}")
             return False
 
+
+class LogtestStatus(Enum):
+    RuleMatch = auto()
+    Error = auto()
+    NoDecoder = auto()
+    NoRule = auto()
+
+
 class LogtestResponse:
     """Represents the response from Wazuh logtest."""
 
-    def __init__(self, response_dict: dict) -> None:
+    def __init__(self, response_dict: dict):
         self.raw_response = response_dict
+
         # Extract error and data from the response
         self.error = response_dict.get('error', 0)
         self.data = response_dict.get('data', {})
+
         self.messages = self.data.get('messages', [])
         self.token = self.data.get('token', '')
-        self.output = self.data.get('output', {})
         self.alert = self.data.get('alert', False)
-        self.decoder = self.output.get('decoder', {}).get('name')
-        self.rule = self.output.get('rule', {})
-        self.rule_description = self.rule.get('description')
-        self.rule_id = self.rule.get('id')
-        self.rule_level = self.rule.get('level')
-        self.rule_groups = self.rule.get('groups', [])
+
+        self.output = self.data.get('output', {})
+        self.full_log = self.output.get('full_log', '')
+        self.timestamp = self.output.get('timestamp', '')
+        self.location = self.output.get('location', '')
+
+        # Decoder information
+        decoder_info = self.output.get('decoder', {})
+        self.decoder = decoder_info.get('name', None)
+
+        # Rule information
+        rule_info = self.output.get('rule', {})
+        self.rule = rule_info if rule_info else None
+        self.rule_id = rule_info.get('id', None)
+        self.rule_level = rule_info.get('level', None)
+        self.rule_description = rule_info.get('description', None)
+        self.rule_groups = rule_info.get(
+            'groups', []) if 'groups' in rule_info else []
+
+        # Parsed data
         self.parsed_data = self.output.get('data', {})
 
+        # Determine the status
+        self.status = self._determine_status()
+
+    def _determine_status(self) -> LogtestStatus:
+        """Determine the status of the response."""
+        if self.error != 0:
+            return LogtestStatus.Error
+        if not self.decoder:
+            return LogtestStatus.NoDecoder
+        if not self.rule_id:
+            return LogtestStatus.NoRule
+        return LogtestStatus.RuleMatch
+
     def get_data_field(self, field_path: list[str]) -> Optional[str]:
-        """Retrieve nested data fields using a list of keys.
-
-        Args:
-            field_path (list[str]): The path to the desired field.
-
-        Returns:
-            Optional[str]: The value of the field, or None if not found.
-        """
+        """Retrieve nested data fields using a list of keys."""
         data = self.parsed_data
         for key in field_path:
             if isinstance(data, dict):
