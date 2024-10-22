@@ -19,7 +19,9 @@ You are ready to update and test your logs locally. You can combine the script i
 
 ## Note
 
-Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copued the files. It is suggested to use a clear naming convention instead of these files. 
+1. Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copued the files. It is suggested to use a clear naming convention instead of these files.
+
+2. The builtin rules of Wazuh are included in the repository but they are disabled by default. You can uncomment the block if you needto test them as well.
 
 ## Permissions
 
