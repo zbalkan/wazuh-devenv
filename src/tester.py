@@ -1,27 +1,62 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+
 import logging
 import os
 import sys
-from configparser import ConfigParser
-from datetime import datetime, timezone
-from typing import Final
 import unittest
+from typing import Final
+
+from internal.result import ResultRunTests
 
 APP_NAME: Final[str] = 'tester'
 APP_VERSION: Final[str] = '0.1'
 DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decoder testing tool."
 ENCODING: Final[str] = "utf-8"
-    
+
+
 def main() -> None:
-    # Create a test loader
-    loader = unittest.TestLoader()
-    # Discover all test cases in the current directory matching the pattern 'test*.py'
-    tests = loader.discover('tests', pattern='test*.py')
-    # Create a test runner that will output the results to the console
+
+    # Create a test loader for the preflight tests
+    print('Running preflight tests...')
+    preflight_test_loader = unittest.TestLoader()
+    # Check file permissions first
+    prefligh_tests = preflight_test_loader.discover(
+        'tests.preflight', pattern='test*.py')
     runner = unittest.TextTestRunner(verbosity=2)
     # Run the discovered tests
-    runner.run(tests)
+    test_result = runner.run(prefligh_tests)
+    # # Print the results in a structured way
+    print(ResultRunTests(test_result))
+
+    # print('Running builtin rule tests...')
+    # # Create a test loader for the rule tests
+    # builtin_loader = unittest.TestLoader()
+    # # Discover all test cases in the current directory matching the pattern 'test*.py'
+    # builtin_rule_tests = builtin_loader.discover(
+    #     'tests.builtin', pattern='test*.py')
+    # # Create a test runner that will output the results to the console
+    # runner = unittest.TextTestRunner(
+    #     verbosity=2)
+    # # Run the discovered tests
+    # builtin_test_result = runner.run(builtin_rule_tests)
+    # # # Print the results in a structured way
+    # print(ResultRunTests(builtin_test_result))
+
+    print('Running custom rule tests...')
+    # Create a test loader for the rule tests
+    custom_loader = unittest.TestLoader()
+    # Discover all test cases in the current directory matching the pattern 'test*.py'
+    custom_rule_tests = custom_loader.discover(
+        'tests.custom', pattern='test*.py')
+    # Create a test runner that will output the results to the console
+    runner = unittest.TextTestRunner(
+        verbosity=2)
+    # Run the discovered tests
+    custom_test_result = runner.run(custom_rule_tests)
+    # # Print the results in a structured way
+    result = ResultRunTests(custom_test_result)
+    print(result.verbose_result)
 
 
 def setup_logging() -> None:
@@ -34,7 +69,9 @@ def setup_logging() -> None:
             level= logging.INFO
         )
 
-    excepthook = logging.error
+    sys.excepthook = lambda exc_type, exc_value, exc_traceback: logging.error(
+        "Unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
+
 
 if __name__ == "__main__":
     try:
@@ -53,7 +90,7 @@ if __name__ == "__main__":
             os._exit(0)
     except Exception as ex:
         print('ERROR: ' + str(ex))
-        logging.error(ex, exc_info=True)
+        logging.exception('Unhandled exception')
         try:
             sys.exit(1)
         except SystemExit:
