@@ -23,11 +23,16 @@ def main() -> None:
     # Check file permissions first
     prefligh_tests = preflight_test_loader.discover(
         'tests.preflight', pattern='test*.py')
-    runner = unittest.TextTestRunner(verbosity=2)
+    runner = unittest.TextTestRunner(verbosity=1)
     # Run the discovered tests
-    test_result = runner.run(prefligh_tests)
+    preflight_test_result = runner.run(prefligh_tests)
     # # Print the results in a structured way
-    print(ResultRunTests(test_result))
+    print(ResultRunTests(preflight_test_result))
+
+    if preflight_test_result.errors or preflight_test_result.failures:
+        print('Preflight tests failed. Exiting.')
+        logging.error('Preflight tests failed. Exiting.')
+        sys.exit(1)
 
     # print('Running builtin rule tests...')
     # # Create a test loader for the rule tests
@@ -51,13 +56,12 @@ def main() -> None:
         'tests.custom', pattern='test*.py')
     # Create a test runner that will output the results to the console
     runner = unittest.TextTestRunner(
-        verbosity=2)
+        verbosity=1)
     # Run the discovered tests
     custom_test_result = runner.run(custom_rule_tests)
     # # Print the results in a structured way
     result = ResultRunTests(custom_test_result)
     print(result.verbose_result)
-
 
 def setup_logging() -> None:
     log_path = os.path.join(f'/var/ossec/logs/{APP_NAME}.log')

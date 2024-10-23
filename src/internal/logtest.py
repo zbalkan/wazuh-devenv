@@ -63,7 +63,29 @@ class WazuhSocket:
     """Handles communication with the Wazuh socket (includes message framing)."""
 
     def __init__(self, file: str) -> None:
-        self.file = file
+        self.__file = file
+
+
+    def is_socket_open(self) -> bool:
+        """Check if the socket is open.
+
+        Returns:
+            bool: True if the logtest socket is open, False otherwise.
+        """
+
+        # Create a TCP/IP socket
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(5)  # Set a timeout for the connection attempt
+
+        try:
+            # Try to connect to the host and port
+            s.connect(self.__file)
+            return True  # Socket is open
+        except (socket.timeout, socket.error):
+            return False  # Socket is closed or connection failed
+        finally:
+            s.close()  # Close the socket
+
 
     def send(self, msg: str) -> bytes:
         """Send and receive data to Wazuh socket with message size framing.
@@ -79,7 +101,7 @@ class WazuhSocket:
         """
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wlogtest_conn:
-                wlogtest_conn.connect(self.file)
+                wlogtest_conn.connect(self.__file)
                 encoded_msg = msg.encode('utf-8')
                 wlogtest_conn.sendall(struct.pack("<I", len(encoded_msg)) + encoded_msg)
                 # Read the size header

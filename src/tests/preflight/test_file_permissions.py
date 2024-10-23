@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-import os
-import stat
-import pwd
 import grp
+import os
+import pwd
+import stat
 import unittest
 
 
@@ -44,7 +44,7 @@ class TestFilePermissions(unittest.TestCase):
         # Test if the file exists
         self.assertTrue(os.path.exists(self.decoders_path),
                         f"File not found: {self.decoders_path}")
-        
+
     def test_rule_permissions(self) -> None:
 
         for root, dirs, files in os.walk(self.rules_path):
