@@ -1,3 +1,4 @@
+import json
 import unittest
 from typing import Literal
 
@@ -32,6 +33,27 @@ class ResultRunTests:
                                    )
 
         return '\n'.join(text_chunks)
+
+    @property
+    def json_result(self) -> str:
+        """Retrieve test results in JSON format."""
+        successful_tests = self.test_result.testsRun - \
+            len(self.test_result.failures) - len(self.test_result.errors)
+
+        res = {
+            "test_result": {
+                "status": self.status,
+                "ran": self.test_result.testsRun,
+                "successful": successful_tests,
+                "failed": len(self.test_result.failures),
+                "errored": len(self.test_result.errors),
+                "failures": [str(failed_test) for failed_test, _ in self.test_result.failures] if self.test_result.failures else [],
+                "errors": [{'err': str(errored_test), 'traceback': traceback}
+                        for errored_test, traceback in self.test_result.errors] if self.test_result.errors else []
+            }
+        }
+
+        return json.dumps(res)
 
     def __str__(self) -> str:
         return f"Status: {self.status}\n" \

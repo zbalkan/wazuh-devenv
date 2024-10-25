@@ -4,8 +4,8 @@ import json
 import logging
 import socket
 import struct
-from typing import Any, Final, Optional
 from enum import Enum, auto
+from typing import Any, Final, Optional
 
 # The socket path is a constant since it's determined by Wazuh
 LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
@@ -37,7 +37,7 @@ class WazuhDaemonProtocol:
         msg['parameters'] = parameters
         return json.dumps(msg)
 
-    def unwrap(self, msg: bytes) -> dict:
+    def unwrap(self, msg: bytes) -> Any:
         """Unwrap data from Wazuh daemon protocol information.
 
         Args:
@@ -123,7 +123,7 @@ class WazuhSocket:
 class WazuhLogtest:
     """Interacts with the wazuh-logtest feature to process logs and manage sessions."""
 
-    def __init__(self, location: str = "stdin", log_format: str = "syslog"):
+    def __init__(self, location: str = "stdin", log_format: str = "syslog") -> None:
         self.protocol = WazuhDaemonProtocol()
         self.socket = WazuhSocket(LOGTEST_SOCKET)
         self.fixed_fields = {
@@ -143,10 +143,12 @@ class WazuhLogtest:
         Returns:
             dict: The response from the Wazuh daemon.
         """
+
         data: dict[str, Any] = self.fixed_fields.copy()
         if token:
             data['token'] = token
-        data['event'] = log
+        # Remove leading and trailing newlines
+        data['event'] = self.__remove_newlines(log)
         if options:
             data['options'] = options
 
@@ -155,7 +157,7 @@ class WazuhLogtest:
         recv_packet = self.socket.send(request)
         logging.debug('Reply: %s', recv_packet.decode('utf-8'))
         # Unwrap the response
-        reply = self.protocol.unwrap(recv_packet)
+        reply: dict = self.protocol.unwrap(recv_packet)
         # Update the session token
         new_token = reply.get('data', {}).get('token')
         if new_token:
@@ -182,11 +184,19 @@ class WazuhLogtest:
         try:
             recv_packet = self.socket.send(request)
             reply = self.protocol.unwrap(recv_packet)
-            codemsg = reply.get('codemsg', -1)
+            codemsg = int(reply.get('codemsg', -1))
             return codemsg >= 0
         except Exception as e:
             logging.error(f"Failed to remove session: {e}")
             return False
+
+
+    def __remove_newlines(self, log: str) -> str:
+        if (log[0] == '\n'):
+            log = log[1:]
+        if (log[-1] == '\n'):
+            log = log[:-1]
+        return log
 
 
 class LogtestStatus(Enum):
@@ -199,7 +209,7 @@ class LogtestStatus(Enum):
 class LogtestResponse:
     """Represents the response from Wazuh logtest."""
 
-    def __init__(self, response_dict: dict):
+    def __init__(self, response_dict: dict) -> None:
         self.raw_response = response_dict
 
         # Extract error and data from the response
@@ -244,7 +254,7 @@ class LogtestResponse:
             return LogtestStatus.NoRule
         return LogtestStatus.RuleMatch
 
-    def get_data_field(self, field_path: list[str]) -> Optional[str]:
+    def get_data_field(self, field_path: list[str]) -> Optional[Any]:
         """Retrieve nested data fields using a list of keys."""
         data = self.parsed_data
         for key in field_path:
@@ -269,7 +279,8 @@ def send_log(log: str, location: str = "stdin", log_format: str = "syslog", toke
         LogtestResponse: The response from Wazuh logtest.
     """
     w_logtest = WazuhLogtest(location=location, log_format=log_format)
-    options = {}
+    options: dict[str, Any] = {}
+
     try:
         response_dict = w_logtest.process_log(log, token=token, options=options)
         return LogtestResponse(response_dict)

@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 import unittest
-from typing import Final
+from typing import Final, Optional
 
 from internal.result import ResultRunTests
 
@@ -15,53 +15,36 @@ DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decod
 ENCODING: Final[str] = "utf-8"
 
 
+def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 1) -> Optional[unittest.result.TestResult]:
+    """Discover and run tests in the specified directory with a given pattern."""
+    print(f'Running {test_directory} tests...')
+    loader = unittest.TestLoader()
+    tests = loader.discover(test_directory, pattern=pattern)
+    runner = unittest.TextTestRunner(verbosity=verbosity)
+    test_result = runner.run(tests)
+
+    # Structure and log the results
+    structured_result = ResultRunTests(test_result)
+    print(structured_result.verbose_result)
+    logging.info(structured_result.json_result)
+
+    return test_result
+
+
 def main() -> None:
-
-    # Create a test loader for the preflight tests
-    print('Running preflight tests...')
-    preflight_test_loader = unittest.TestLoader()
-    # Check file permissions first
-    prefligh_tests = preflight_test_loader.discover(
-        'tests.preflight', pattern='test*.py')
-    runner = unittest.TextTestRunner(verbosity=1)
-    # Run the discovered tests
-    preflight_test_result = runner.run(prefligh_tests)
-    # # Print the results in a structured way
-    print(ResultRunTests(preflight_test_result))
-
-    if preflight_test_result.errors or preflight_test_result.failures:
+    # Run preflight tests
+    preflight_result = run_tests('tests.preflight')
+    if preflight_result and (preflight_result.errors or preflight_result.failures):
         print('Preflight tests failed. Exiting.')
         logging.error('Preflight tests failed. Exiting.')
-        sys.exit(1)
+        exit(1)
 
-    # print('Running builtin rule tests...')
-    # # Create a test loader for the rule tests
-    # builtin_loader = unittest.TestLoader()
-    # # Discover all test cases in the current directory matching the pattern 'test*.py'
-    # builtin_rule_tests = builtin_loader.discover(
-    #     'tests.builtin', pattern='test*.py')
-    # # Create a test runner that will output the results to the console
-    # runner = unittest.TextTestRunner(
-    #     verbosity=2)
-    # # Run the discovered tests
-    # builtin_test_result = runner.run(builtin_rule_tests)
-    # # # Print the results in a structured way
-    # print(ResultRunTests(builtin_test_result))
+    # Run built-in rule tests
+    run_tests('tests.builtin')
 
-    print('Running custom rule tests...')
-    # Create a test loader for the rule tests
-    custom_loader = unittest.TestLoader()
-    # Discover all test cases in the current directory matching the pattern 'test*.py'
-    custom_rule_tests = custom_loader.discover(
-        'tests.custom', pattern='test*.py')
-    # Create a test runner that will output the results to the console
-    runner = unittest.TextTestRunner(
-        verbosity=1)
-    # Run the discovered tests
-    custom_test_result = runner.run(custom_rule_tests)
-    # # Print the results in a structured way
-    result = ResultRunTests(custom_test_result)
-    print(result.verbose_result)
+    # Run custom rule tests
+    run_tests('tests.custom')
+
 
 def setup_logging() -> None:
     log_path = os.path.join(f'/var/ossec/logs/{APP_NAME}.log')
