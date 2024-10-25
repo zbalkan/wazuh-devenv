@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestPostfixRules(unittest.TestCase):
 
     def test_reject_rcpt(self) -> None:
-        log = '''May  8 08:26:55 mail postfix/postscreen[22055]: NOQUEUE: reject: RCPT from [157.122.148.242]:47407: 9999 text ...'''
+        log = r'''
+May  8 08:26:55 mail postfix/postscreen[22055]: NOQUEUE: reject: RCPT from [157.122.148.242]:47407: 9999 text ...
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestPostfixRules(unittest.TestCase):
 
 
     def test_reject_rcpt2(self) -> None:
-        log = '''May  8 08:26:55 mail postfix/postscreen[22055]: NOQUEUE: reject: RCPT from [157.122.148.242]:47407: 550 5.7.1 Service unavailable; client [157.122.148.242] blocked using bl.spamcop.net; f$'''
+        log = r'''
+May  8 08:26:55 mail postfix/postscreen[22055]: NOQUEUE: reject: RCPT from [157.122.148.242]:47407: 550 5.7.1 Service unavailable; client [157.122.148.242] blocked using bl.spamcop.net; f$
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

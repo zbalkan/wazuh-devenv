@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestFortiddosRules(unittest.TestCase):
 
     def test_fortigate_ips_high_severity(self) -> None:
-        log = '''2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="high"'''
+        log = r'''
+2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="high"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestFortiddosRules(unittest.TestCase):
 
 
     def test_fortigate_ips_low_severity(self) -> None:
-        log = '''2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="low"'''
+        log = r'''
+2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="low"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -35,7 +39,9 @@ class TestFortiddosRules(unittest.TestCase):
 
 
     def test_fortigate_ips_medium_severity(self) -> None:
-        log = '''2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="medium"'''
+        log = r'''
+2021-05-27T23:59:59.998837-03:00 12.34.56.78 devid=FGXXXXXXX date=2021-05-28 time=00:00:00 tz=ART type=attack subtype="ips" spp=4 evecode=2 evesubcode=27 description="TCP invalid flag combination " dir=1 protocol=6 sip=0.0.0.0 dip=12.34.56.79 dropcount=30 subnetid=95 facility=Local0 level=Notice direction=inbound spp_name="YYYYY" subnet_name="ZZZZZ" sppoperatingmode=detection severity="medium"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

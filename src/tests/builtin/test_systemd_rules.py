@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestSystemdRules(unittest.TestCase):
 
     def test_stale_file_handle(self) -> None:
-        log = '''Jul 19 07:28:02 localhost systemd: Failed to mark scope session-1024.scope as abandoned : Stale file handle'''
+        log = r'''
+Jul 19 07:28:02 localhost systemd: Failed to mark scope session-1024.scope as abandoned : Stale file handle
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestSystemdRules(unittest.TestCase):
 
 
     def test_system_time_changed(self) -> None:
-        log = '''Aug 13 13:20:58 master systemd: Time has been changed'''
+        log = r'''
+Aug 13 13:20:58 master systemd: Time has been changed
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

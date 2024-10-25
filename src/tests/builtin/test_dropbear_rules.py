@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestDropbearRules(unittest.TestCase):
 
     def test_dropbear_bad_password_attempt(self) -> None:
-        log = '''Jan  8 16:39:33 tp.lan dropbear[14824]: Bad password attempt for 'root' from 193.219.28.149:48629'''
+        log = r'''
+Jan  8 16:39:33 tp.lan dropbear[14824]: Bad password attempt for 'root' from 193.219.28.149:48629
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestDropbearRules(unittest.TestCase):
 
 
     def test_dropbear_bad_password_attempt_for_non_existing_user(self) -> None:
-        log = '''Jan  8 19:54:12 tp.lan dropbear[15197]: Login attempt for nonexistent user from 182.72.89.122:4328'''
+        log = r'''
+Jan  8 19:54:12 tp.lan dropbear[15197]: Login attempt for nonexistent user from 182.72.89.122:4328
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -35,7 +39,9 @@ class TestDropbearRules(unittest.TestCase):
 
 
     def test_dropbear_user_successfully_logged_in_using_a_public_key(self) -> None:
-        log = '''Jan  8 19:32:41 tp.lan dropbear[15165]: Pubkey auth succeeded for 'root' with key md5 78:d6:41:ca:78:37:80:88:1d:15:0a:68:91:d1:4e:ad from 10.10.10.241:51737'''
+        log = r'''
+Jan  8 19:32:41 tp.lan dropbear[15165]: Pubkey auth succeeded for 'root' with key md5 78:d6:41:ca:78:37:80:88:1d:15:0a:68:91:d1:4e:ad from 10.10.10.241:51737
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

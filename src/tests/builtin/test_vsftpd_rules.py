@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestVsftpdRules(unittest.TestCase):
 
     def test_connect_1(self) -> None:
-        log = '''Wed Jul 27 18:32:27 2016 [pid 2] CONNECT: Client "fe80::baac:6fff:fe7d:d2e0"'''
+        log = r'''
+Wed Jul 27 18:32:27 2016 [pid 2] CONNECT: Client "fe80::baac:6fff:fe7d:d2e0"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestVsftpdRules(unittest.TestCase):
 
 
     def test_connect_2(self) -> None:
-        log = '''Wed Jul 27 18:32:27 2016 [pid 2] CONNECT: Client "10.11.12.13"'''
+        log = r'''
+Wed Jul 27 18:32:27 2016 [pid 2] CONNECT: Client "10.11.12.13"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -35,7 +39,9 @@ class TestVsftpdRules(unittest.TestCase):
 
 
     def test_login_1(self) -> None:
-        log = '''Mon Oct 24 11:32:53 2016 [pid 1] [$ALOC$] FAIL LOGIN: Client "10.55.112.101"'''
+        log = r'''
+Mon Oct 24 11:32:53 2016 [pid 1] [$ALOC$] FAIL LOGIN: Client "10.55.112.101"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -46,7 +52,9 @@ class TestVsftpdRules(unittest.TestCase):
 
 
     def test_login_2(self) -> None:
-        log = '''Mon Oct 24 11:32:53 2016 [pid 1] [$ALOC$] FAIL LOGIN: Client "fe80::baac:6fff:fe7d:d2e0"'''
+        log = r'''
+Mon Oct 24 11:32:53 2016 [pid 1] [$ALOC$] FAIL LOGIN: Client "fe80::baac:6fff:fe7d:d2e0"
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

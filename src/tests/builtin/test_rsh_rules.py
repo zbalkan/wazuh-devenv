@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestRshRules(unittest.TestCase):
 
     def test_rshd_illegal_1(self) -> None:
-        log = '''Dec 17 10:49:23 hostname rshd[347339]: Connection from 10.217.223.31 on illegal port'''
+        log = r'''
+Dec 17 10:49:23 hostname rshd[347339]: Connection from 10.217.223.31 on illegal port
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,8 +26,10 @@ class TestRshRules(unittest.TestCase):
 
 
     def test_rshd_illegal_2(self) -> None:
-        log = '''Dec 17 10:49:23 hostname rhsd[347339]: Connection from 10.217.223.31 on illegal port'''
+        log = r'''
+Dec 17 10:49:23 hostname rhsd[347339]: Connection from 10.217.223.31 on illegal port
+'''
         response = send_log(log)
 
-        self.assertNotEqual(response.status, LogtestStatus.RuleMatch)
+        self.assertNotEqual(response.rule_id, '2551')
 

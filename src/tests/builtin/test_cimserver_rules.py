@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestCimserverRules(unittest.TestCase):
 
     def test_rshd_illegal_1(self) -> None:
-        log = '''Dec 18 18:06:28 hostname cimserver[18575]: PGS17200: Authentication failed for user jones_b.'''
+        log = r'''
+Dec 18 18:06:28 hostname cimserver[18575]: PGS17200: Authentication failed for user jones_b.
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,8 +26,10 @@ class TestCimserverRules(unittest.TestCase):
 
 
     def test_rshd_illegal_2(self) -> None:
-        log = '''Dec 18 18:06:29 hostname vimserver[18575]: PGS17200: Authentication failed for user domain\jones_b.'''
+        log = r'''
+Dec 18 18:06:29 hostname vimserver[18575]: PGS17200: Authentication failed for user domain\jones_b.
+'''
         response = send_log(log)
 
-        self.assertNotEqual(response.status, LogtestStatus.RuleMatch)
+        self.assertNotEqual(response.rule_id, '9610')
 

@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestFortiauthRules(unittest.TestCase):
 
     def test_fortiauth_pending_authentication(self) -> None:
-        log = '''2021-07-08T11:01:06-03:00 XXX.XXX.XXX.XXX db[32167]:  category="Event" subcategory="Authentication" typeid=20299 level="information" user="user2" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Pending" Remote RADIUS user authentication partially done, remote server expecting challenge response'''
+        log = r'''
+2021-07-08T11:01:06-03:00 XXX.XXX.XXX.XXX db[32167]:  category="Event" subcategory="Authentication" typeid=20299 level="information" user="user2" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Pending" Remote RADIUS user authentication partially done, remote server expecting challenge response
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestFortiauthRules(unittest.TestCase):
 
 
     def test_fortiauth_failed_authentication(self) -> None:
-        log = '''2021-07-08T11:00:56-03:00 XXX.XXX.XXX.XXX db[31013]:  category="Event" subcategory="Authentication" typeid=20001 level="information" user="user1" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Failed" Remote RADIUS user authentication with invalid token'''
+        log = r'''
+2021-07-08T11:00:56-03:00 XXX.XXX.XXX.XXX db[31013]:  category="Event" subcategory="Authentication" typeid=20001 level="information" user="user1" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Failed" Remote RADIUS user authentication with invalid token
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -35,7 +39,9 @@ class TestFortiauthRules(unittest.TestCase):
 
 
     def test_fortiauth_successful_authentication(self) -> None:
-        log = '''2021-07-08T11:00:56-03:00 XXX.XXX.XXX.XXX db[31013]:  category="Event" subcategory="Authentication" typeid=20001 level="information" user="user1" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Success" Remote RADIUS user authentication with no token successful'''
+        log = r'''
+2021-07-08T11:00:56-03:00 XXX.XXX.XXX.XXX db[31013]:  category="Event" subcategory="Authentication" typeid=20001 level="information" user="user1" nas="XXX.XXX.XXX.XXX" action="Authentication" status="Success" Remote RADIUS user authentication with no token successful
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -46,7 +52,9 @@ class TestFortiauthRules(unittest.TestCase):
 
 
     def test_fortiauth_info_event(self) -> None:
-        log = '''2021-07-08T11:01:03-03:00 XXX.XXX.XXX.XXX db[32167]:  category="Event" subcategory="System" typeid=30101 level="information" user="admin" nas="" action="" status="" RADIUS server running in full edition'''
+        log = r'''
+2021-07-08T11:01:03-03:00 XXX.XXX.XXX.XXX db[32167]:  category="Event" subcategory="System" typeid=30101 level="information" user="admin" nas="" action="" status="" RADIUS server running in full edition
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

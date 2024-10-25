@@ -10,10 +10,12 @@ from internal.logtest import LogtestStatus, send_log
 
 
 # Converted from squid_rules.ini
-class TestSquid_rulesRules(unittest.TestCase):
+class TestSquidRulesRules(unittest.TestCase):
 
     def test_squid_bad_request_invalid_syntax(self) -> None:
-        log = '''1140701044.525   1231 192.168.1.201 TCP_DENIED/400 1536 GET ahmet - NONE/- text/html'''
+        log = r'''
+1140701044.525   1231 192.168.1.201 TCP_DENIED/400 1536 GET ahmet - NONE/- text/html
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestSquid_rulesRules(unittest.TestCase):
 
 
     def test_squid_proxy_authentication_required(self) -> None:
-        log = '''1140701230.827    781 192.168.1.210 TCP_DENIED/407 1785 GET http://www.ossec.net oahmet NONE/- text/html'''
+        log = r'''
+1140701230.827    781 192.168.1.210 TCP_DENIED/407 1785 GET http://www.ossec.net oahmet NONE/- text/html
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

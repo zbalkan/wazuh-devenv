@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestPhpRules(unittest.TestCase):
 
     def test_php_web_attack(self) -> None:
-        log = '''2014/12/30 06:07:37 [error] PHP Warning: urlencode() expects parameter 1 to be string, array given in'''
+        log = r'''
+2014/12/30 06:07:37 [error] PHP Warning: urlencode() expects parameter 1 to be string, array given in
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestPhpRules(unittest.TestCase):
 
 
     def test_php_internal_error_missing_file_or_function(self) -> None:
-        log = '''2014/12/30 06:07:37 [error] PHP Fatal error:  require_once() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/SkinTemplate.php''''
+        log = r'''
+2014/12/30 06:07:37 [error] PHP Fatal error:  require_once() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/SkinTemplate.php'
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)

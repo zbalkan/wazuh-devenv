@@ -13,7 +13,9 @@ from internal.logtest import LogtestStatus, send_log
 class TestGithubRules(unittest.TestCase):
 
     def test_github_account_category(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -24,7 +26,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_account_billing_plan_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.billing_plan_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.billing_plan_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -35,7 +39,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_account_plan_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.plan_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.plan_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -46,7 +52,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_account_pending_plan_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.pending_plan_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.pending_plan_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -57,7 +65,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_account_pending_subscription_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.pending_subscription_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"account.pending_subscription_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -68,7 +78,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_advisory_credit(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -79,7 +91,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_advisory_credit_accept(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.accept"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.accept"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -90,7 +104,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_advisory_credit_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -101,7 +117,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_advisory_credit_decline(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.decline"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.decline"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -112,7 +130,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_advisory_credit_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"advisory_credit.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -123,7 +143,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_billing(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -134,7 +156,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_billing_change_billing_type(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing.change_billing_type"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing.change_billing_type"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -145,7 +169,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_billing_change_billing_email(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing.change_billing_email"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"billing.change_billing_email"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -156,7 +182,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -167,7 +195,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -178,7 +208,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -189,7 +221,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts_new_repos(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -200,7 +234,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts_new_repos_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -211,7 +247,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_alerts_new_repos_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_alerts_new_repos.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -222,7 +260,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -233,7 +273,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -244,7 +286,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -255,7 +299,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates_new_repos(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -266,7 +312,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates_new_repos_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -277,7 +325,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependabot_security_updates_new_repos_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependabot_security_updates_new_repos.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -288,7 +338,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -299,7 +351,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -310,7 +364,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -321,7 +377,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph_new_repos(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -332,7 +390,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph_new_repos_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -343,7 +403,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_dependency_graph_new_repos_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"dependency_graph_new_repos.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -354,7 +416,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -365,7 +429,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -376,7 +442,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -387,7 +455,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post_reply(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -398,7 +468,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post_replay_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -409,7 +481,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_discussion_post_replay_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"discussion_post_reply.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -420,7 +494,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -431,7 +507,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_remove_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.remove_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.remove_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -442,7 +520,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_register_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.register_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.register_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -453,7 +533,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_created(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_created"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_created"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -464,7 +546,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_removed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_removed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_removed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -475,7 +559,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_runner_removed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runner_removed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runner_removed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -486,7 +572,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_runners_added(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runners_added"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runners_added"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -497,7 +585,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_runners_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runners_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_runners_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -508,7 +598,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_runner_group_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.runner_group_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -519,7 +611,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_enterprise_self_hosted_runner_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.self_hosted_runner_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"enterprise.self_hosted_runner_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -530,7 +624,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -541,7 +637,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_create_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.create_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.create_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -552,7 +650,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -563,7 +663,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_remove_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.remove_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.remove_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -574,7 +676,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_update_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.update_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.update_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -585,7 +689,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_add_protection_rule(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.add_protection_rule"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.add_protection_rule"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -596,7 +702,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_update_protection_rule(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.update_protection_rule"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.update_protection_rule"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -607,7 +715,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_environment_remove_protection_rule(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.remove_protection_rule"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"environment.remove_protection_rule"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -618,7 +728,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_git(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -629,7 +741,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_git_clone(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.clone"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.clone"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -640,7 +754,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_git_fetch(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.fetch"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.fetch"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -651,7 +767,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_git_push(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.push"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"git.push"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -662,7 +780,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_hook(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -673,7 +793,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_hook_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -684,7 +806,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_hook_config_changed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.config_changed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.config_changed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -695,7 +819,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_hook_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -706,7 +832,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_hook_events_changed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.events_changed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"hook.events_changed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -717,7 +845,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_integration_installation_1(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -728,7 +858,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_integration_installation_2(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation_request."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation_request."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -739,7 +871,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_integration_installation_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -750,7 +884,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_integration_installation_close(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation.close"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"integration_installation.close"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -761,7 +897,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_issues_1(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issue."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issue."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -772,7 +910,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_issues_2(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issues."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issues."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -783,7 +923,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_issues_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issues.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"issues.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -794,7 +936,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_agreement_signature(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_agreement_signature."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_agreement_signature."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -805,7 +949,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_agreement_signature_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_agreement_signature.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_agreement_signature.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -816,7 +962,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -827,7 +975,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing_approve(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.approve"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.approve"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -838,7 +988,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -849,7 +1001,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing_delist(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.delist"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.delist"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -860,7 +1014,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing_redraft(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.redraft"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.redraft"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -871,7 +1027,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_marketplace_listing_reject(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.reject"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"marketplace_listing.reject"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -882,7 +1040,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_members_can_create_pages(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -893,7 +1053,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_members_can_create_pages_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -904,7 +1066,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_members_can_create_pages_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"members_can_create_pages.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -915,7 +1079,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -926,7 +1092,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -937,7 +1105,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -948,7 +1118,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application_reset_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.reset_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.reset_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -959,7 +1131,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application_revoke_tokens(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.revoke_tokens"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.revoke_tokens"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -970,7 +1144,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_oauth_application_transfer(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.transfer"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"oauth_application.transfer"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -981,7 +1157,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -992,7 +1170,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_add_billing_manager(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.add_billing_manager"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.add_billing_manager"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1003,7 +1183,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_add_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.add_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.add_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1014,7 +1196,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_advanced_security_policy_selected_member_disabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.advanced_security_policy_selected_member_disabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.advanced_security_policy_selected_member_disabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1025,7 +1209,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_advanced_security_policy_selected_member_enabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.advanced_security_policy_selected_member_enabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.advanced_security_policy_selected_member_enabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1036,7 +1222,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_audit_log_export_1(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.audit_log_export"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.audit_log_export"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1047,7 +1235,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_audit_log_export_2(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.audit_log_git_event_export"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.audit_log_git_event_export"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1058,7 +1248,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_block_user(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.block_user"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.block_user"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1069,7 +1261,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_cancel_invitation(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.cancel_invitation"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.cancel_invitation"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1080,7 +1274,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1091,7 +1287,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_create_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.create_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.create_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1102,7 +1300,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_disable_member_team_creation_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_member_team_creation_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_member_team_creation_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1113,7 +1313,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_disable_oauth_app_restrictions(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_oauth_app_restrictions"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_oauth_app_restrictions"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1124,7 +1326,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_disable_saml(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_saml"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_saml"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1135,7 +1339,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_disable_two_factor_requirement(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_two_factor_requirement"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.disable_two_factor_requirement"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1146,7 +1352,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_display_commenter_full_name_enabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.display_commenter_full_name_enabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.display_commenter_full_name_enabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1157,7 +1365,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_enable_member_team_creation_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_member_team_creation_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_member_team_creation_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1168,7 +1378,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_enable_oauth_app_restrictions(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_oauth_app_restrictions"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_oauth_app_restrictions"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1179,7 +1391,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_enable_saml(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_saml"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_saml"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1190,7 +1404,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_enable_two_factor_requirement(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_two_factor_requirement"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.enable_two_factor_requirement"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1201,7 +1417,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_invite_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.invite_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.invite_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1212,7 +1430,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_oauth_app_access_approved(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_approved"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_approved"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1223,7 +1443,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_oauth_app_access_denied(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_denied"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_denied"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1234,7 +1456,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_oauth_app_access_requested(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_requested"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.oauth_app_access_requested"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1245,7 +1469,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_register_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.register_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.register_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1256,7 +1482,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_remove_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1267,7 +1495,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_remove_billing_manager(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_billing_manager"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_billing_manager"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1278,7 +1508,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_remove_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1289,7 +1521,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_remove_outside_collaborator(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_outside_collaborator"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_outside_collaborator"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1300,7 +1534,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_remove_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.remove_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1311,7 +1547,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_restore_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.restore_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.restore_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1322,7 +1560,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_revoke_external_identity(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.revoke_external_identity"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.revoke_external_identity"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1333,7 +1573,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_revoke_sso_session(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.revoke_sso_session"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.revoke_sso_session"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1344,7 +1586,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_created(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_created"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_created"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1355,7 +1599,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_removed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_removed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_removed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1366,7 +1612,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_runner_removed(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runner_removed"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runner_removed"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1377,7 +1625,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_runners_added(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runners_added"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runners_added"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1388,7 +1638,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_runners_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runners_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_runners_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1399,7 +1651,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_runner_group_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.runner_group_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1410,7 +1664,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_self_hosted_runner_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.self_hosted_runner_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.self_hosted_runner_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1421,7 +1677,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_set_actions_retention_limit(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.set_actions_retention_limit"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.set_actions_retention_limit"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1432,7 +1690,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_unblock_user(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.unblock_user"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.unblock_user"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1443,7 +1703,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1454,7 +1716,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_actions_settings(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_actions_settings"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_actions_settings"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1465,7 +1729,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_default_repository_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_default_repository_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_default_repository_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1476,7 +1742,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1487,7 +1755,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_member_repository_creation_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_member_repository_creation_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_member_repository_creation_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1498,7 +1768,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_new_repository_default_branch_setting(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_new_repository_default_branch_setting"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_new_repository_default_branch_setting"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1509,7 +1781,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_saml_provider_settings(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_saml_provider_settings"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_saml_provider_settings"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1520,7 +1794,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_update_terms_of_service(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_terms_of_service"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org.update_terms_of_service"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1531,7 +1807,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_credential_authorization(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1542,7 +1820,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_credential_authorization_grant(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.grant"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.grant"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1553,7 +1833,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_credential_authorization_deauthorized(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.deauthorized"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.deauthorized"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1564,7 +1846,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_credential_authorization_revoke(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.revoke"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"org_credential_authorization.revoke"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1575,7 +1859,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_default_label_1(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1586,7 +1872,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_default_label_2(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_label."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_label."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1597,7 +1885,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_default_label_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1608,7 +1898,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_default_label_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1619,7 +1911,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_default_label_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_default_label.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1630,7 +1924,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_packages(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1641,7 +1937,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_package_version_published(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_published"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_published"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1652,7 +1950,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_package_version_deleted(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_deleted"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_deleted"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1663,7 +1963,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_package_deleted(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_deleted"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_deleted"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1674,7 +1976,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_package_version_restored(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_restored"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_version_restored"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1685,7 +1989,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_package_restored(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_restored"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"packages.package_restored"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1696,7 +2002,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_payment_method(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1707,7 +2015,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_payment_method_clear(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.clear"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.clear"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1718,7 +2028,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_payment_method_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1729,7 +2041,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_payment_method_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"payment_method.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1740,7 +2054,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_profile_picture(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"profile_picture."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"profile_picture."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1751,7 +2067,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_profile_picture_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"profile_picture.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"profile_picture.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1762,7 +2080,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1773,7 +2093,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1784,7 +2106,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_link(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.link"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.link"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1795,7 +2119,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_rename(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.rename"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.rename"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1806,7 +2132,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1817,7 +2145,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1828,7 +2158,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_unlink(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.unlink"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.unlink"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1839,7 +2171,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_update_org_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_org_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_org_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1850,7 +2184,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_update_team_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_team_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_team_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1861,7 +2197,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_project_update_user_permission(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_user_permission"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"project.update_user_permission"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1872,7 +2210,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_domain(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1883,7 +2223,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_domain_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1894,7 +2236,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_organization_domain_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"organization_domain.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1905,7 +2249,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_private_repository_forking(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1916,7 +2262,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_private_repository_forking_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1927,7 +2275,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_private_repository_forking_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"private_repository_forking.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1938,7 +2288,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1949,7 +2301,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1960,7 +2314,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1971,7 +2327,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_admin_enforced(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_admin_enforced"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_admin_enforced"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1982,7 +2340,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_require_code_owner_review(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_require_code_owner_review"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_require_code_owner_review"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -1993,7 +2353,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_dismissal_restricted_users_teams(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.dismissal_restricted_users_teams"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.dismissal_restricted_users_teams"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2004,7 +2366,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_dismiss_stale_reviews(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.dismiss_stale_reviews"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.dismiss_stale_reviews"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2015,7 +2379,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_signature_requirement_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_signature_requirement_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_signature_requirement_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2026,7 +2392,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_pull_request_reviews_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_pull_request_reviews_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_pull_request_reviews_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2037,7 +2405,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_required_status_checks_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_required_status_checks_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_required_status_checks_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2048,7 +2418,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_strict_required_status_checks_policy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_strict_required_status_checks_policy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_strict_required_status_checks_policy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2059,7 +2431,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_rejected_ref_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.rejected_ref_update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.rejected_ref_update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2070,7 +2444,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_policy_override(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.policy_override"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.policy_override"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2081,7 +2457,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_allow_force_pushes_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_allow_force_pushes_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_allow_force_pushes_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2092,7 +2470,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_allow_deletions_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_allow_deletions_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_allow_deletions_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2103,7 +2483,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_protected_branch_update_linear_history_requirement_enforcement_level(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_linear_history_requirement_enforcement_level"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"protected_branch.update_linear_history_requirement_enforcement_level"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2114,7 +2496,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2125,7 +2509,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2136,7 +2522,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_close(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.close"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.close"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2147,7 +2535,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_reopen(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.reopen"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.reopen"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2158,7 +2548,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_merge(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.merge"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.merge"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2169,7 +2561,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_indirect_merge(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.indirect_merge"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.indirect_merge"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2180,7 +2574,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_ready_for_review(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.ready_for_review"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.ready_for_review"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2191,7 +2587,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_converted_to_draft(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.converted_to_draft"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.converted_to_draft"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2202,7 +2600,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_create_review_request(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.create_review_request"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.create_review_request"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2213,7 +2613,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_remove_review_request(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.remove_review_request"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request.remove_review_request"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2224,7 +2626,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2235,7 +2639,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_submit(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.submit"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.submit"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2246,7 +2652,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_dismiss(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.dismiss"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.dismiss"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2257,7 +2665,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2268,7 +2678,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_comment(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2279,7 +2691,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_comment_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2290,7 +2704,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_comment_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2301,7 +2717,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_pull_request_review_comment_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"pull_request_review_comment.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2312,7 +2730,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2323,7 +2743,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_access(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.access"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.access"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2334,7 +2756,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_actions_enabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.actions_enabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.actions_enabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2345,7 +2769,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_add_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.add_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.add_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2356,7 +2782,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_add_topic(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.add_topic"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.add_topic"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2367,7 +2795,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_advanced_security_disabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.advanced_security_disabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.advanced_security_disabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2378,7 +2808,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_advanced_security_enabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.advanced_security_enabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.advanced_security_enabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2389,7 +2821,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_archived(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.archived"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.archived"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2400,7 +2834,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2411,7 +2847,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_create_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.create_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.create_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2422,7 +2860,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2433,7 +2873,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2444,7 +2886,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2455,7 +2899,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_pages_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2466,7 +2912,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_pages_https_redirect_enabled(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_https_redirect_enabled"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_https_redirect_enabled"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2477,7 +2925,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_pages_private(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_private"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_private"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2488,7 +2938,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_pages_public(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_public"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_public"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2499,7 +2951,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_pages_source(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_source"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.pages_source"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2510,7 +2964,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_remove_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2521,7 +2977,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_remove_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2532,7 +2990,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_register_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.register_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.register_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2543,7 +3003,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_remove_self_hosted_runner(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_self_hosted_runner"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_self_hosted_runner"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2554,7 +3016,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_remove_topic(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_topic"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.remove_topic"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2565,7 +3029,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_rename(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.rename"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.rename"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2576,7 +3042,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_self_hosted_runner_updated(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.self_hosted_runner_updated"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.self_hosted_runner_updated"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2587,7 +3055,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_set_actions_retention_limit(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.set_actions_retention_limit"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.set_actions_retention_limit"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2598,7 +3068,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_transfer(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.transfer"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.transfer"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2609,7 +3081,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_transfer_start(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.transfer_start"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.transfer_start"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2620,7 +3094,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_unarchived(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.unarchived"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.unarchived"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2631,7 +3107,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repo_update_actions_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.update_actions_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repo.update_actions_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2642,7 +3120,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2653,7 +3133,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_close(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.close"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.close"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2664,7 +3146,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_cve_request(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.cve_request"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.cve_request"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2675,7 +3159,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_github_broadcast(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.github_broadcast"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.github_broadcast"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2686,7 +3172,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_github_withdraw(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.github_withdraw"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.github_withdraw"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2697,7 +3185,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_open(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.open"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.open"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2708,7 +3198,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_publish(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.publish"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.publish"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2719,7 +3211,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_reopen(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.reopen"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.reopen"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2730,7 +3224,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_advisory_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_advisory.update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2741,7 +3237,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_content_analysis(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2752,7 +3250,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_content_analysis_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2763,7 +3263,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_content_analysis_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_content_analysis.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2774,7 +3276,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_dependency_graph(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2785,7 +3289,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_dependency_graph_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2796,7 +3302,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_dependency_graph_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_dependency_graph.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2807,7 +3315,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_projects_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2818,7 +3328,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_projects_change_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2829,7 +3341,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_projects_change_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_projects_change.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2840,7 +3354,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_secret_scanning(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2851,7 +3367,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_secret_scanning_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2862,7 +3380,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_secret_scanning_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_secret_scanning.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2873,7 +3393,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alert(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2884,7 +3406,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alert_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2895,7 +3419,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alert_dismiss(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.dismiss"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.dismiss"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2906,7 +3432,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alert_resolve(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.resolve"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alert.resolve"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2917,7 +3445,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alerts(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2928,7 +3458,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alerts_authorized_users_teams(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.authorized_users_teams"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.authorized_users_teams"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2939,7 +3471,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alerts_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2950,7 +3484,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_repository_vulnerability_alerts_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"repository_vulnerability_alerts.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2961,7 +3497,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2972,7 +3510,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2983,7 +3523,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -2994,7 +3536,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning_new_repos(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3005,7 +3549,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning_new_repos_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3016,7 +3562,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_secret_scanning_new_repos_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"secret_scanning_new_repos.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3027,7 +3575,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3038,7 +3588,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_custom_amount_settings_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.custom_amount_settings_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.custom_amount_settings_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3049,7 +3601,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_repo_funding_links_file_action(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.repo_funding_links_file_action"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.repo_funding_links_file_action"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3060,7 +3614,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsorship_cancel(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_cancel"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_cancel"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3071,7 +3627,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsorship_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3082,7 +3640,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsorship_preference_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_preference_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_preference_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3093,7 +3653,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsorship_tier_change(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_tier_change"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsor_sponsorship_tier_change"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3104,7 +3666,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_approve(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_approve"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_approve"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3115,7 +3679,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3126,7 +3692,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3137,7 +3705,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_redraft(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_redraft"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_redraft"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3148,7 +3718,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_profile_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_profile_update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_profile_update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3159,7 +3731,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_request_approval(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_request_approval"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_request_approval"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3170,7 +3744,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_tier_description_update(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_tier_description_update"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_tier_description_update"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3181,7 +3757,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_sponsored_developer_update_newsletter_send(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_update_newsletter_send"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.sponsored_developer_update_newsletter_send"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3192,7 +3770,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_waitlist_invite_sponsored_developer(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.waitlist_invite_sponsored_developer"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.waitlist_invite_sponsored_developer"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3203,7 +3783,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_sponsors_waitlist_join(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.waitlist_join"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"sponsors.waitlist_join"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3214,7 +3796,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3225,7 +3809,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_add_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.add_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.add_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3236,7 +3822,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_add_repository(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.add_repository"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.add_repository"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3247,7 +3835,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_change_parent_team(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.change_parent_team"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.change_parent_team"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3258,7 +3848,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_change_privacy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.change_privacy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.change_privacy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3269,7 +3861,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3280,7 +3874,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_demote_maintainer(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.demote_maintainer"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.demote_maintainer"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3291,7 +3887,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_destroy(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.destroy"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.destroy"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3302,7 +3900,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_promote_maintainer(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.promote_maintainer"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.promote_maintainer"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3313,7 +3913,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_remove_member(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.remove_member"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.remove_member"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3324,7 +3926,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_remove_repository(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.remove_repository"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team.remove_repository"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3335,7 +3939,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_discussions(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3346,7 +3952,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_discussions_disable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions.disable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions.disable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3357,7 +3965,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_team_discussions_enable(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions.enable"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"team_discussions.enable"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3368,7 +3978,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3379,7 +3991,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_cancel_workflow_run(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.cancel_workflow_run"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.cancel_workflow_run"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3390,7 +4004,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_completed_workflow_run(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.completed_workflow_run"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.completed_workflow_run"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3401,7 +4017,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_created_workflow_run(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.created_workflow_run"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.created_workflow_run"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3412,7 +4030,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_delete_workflow_run(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.delete_workflow_run"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.delete_workflow_run"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3423,7 +4043,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_disable_workflow(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.disable_workflow"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.disable_workflow"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3434,7 +4056,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_enable_workflow(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.enable_workflow"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.enable_workflow"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3445,7 +4069,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_rerun_workflow_run(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.rerun_workflow_run"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.rerun_workflow_run"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3456,7 +4082,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_workflows_prepared_workflow_job(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.prepared_workflow_job"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"workflows.prepared_workflow_job"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3467,7 +4095,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces."}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces."}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3478,7 +4108,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_create(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.create"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.create"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3489,7 +4121,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_resume(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.resume"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.resume"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3500,7 +4134,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_delete(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.delete"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.delete"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3511,7 +4147,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_create_an_org_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.create_an_org_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.create_an_org_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3522,7 +4160,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_update_an_org_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.update_an_org_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.update_an_org_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3533,7 +4173,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_remove_an_org_secret(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.remove_an_org_secret"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.remove_an_org_secret"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3544,7 +4186,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_codespaces_manage_access_and_security(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.manage_access_and_security"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"codespaces.manage_access_and_security"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3555,7 +4199,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_module_internal_event_3_request_fail(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"wazuh","created_at":1619032221869,"request":"request","response":"response"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"wazuh","created_at":1619032221869,"request":"request","response":"response"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
@@ -3566,7 +4212,9 @@ class TestGithubRules(unittest.TestCase):
 
 
     def test_github_generic_rule(self) -> None:
-        log = '''{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"unknown"}}'''
+        log = r'''
+{"integration":"github","github":{"actor":"user","org":"organization","created_at":1619032221869,"action":"unknown"}}
+'''
         response = send_log(log)
 
         self.assertEqual(response.status, LogtestStatus.RuleMatch)
