@@ -161,8 +161,6 @@ EOF
     info "Wazuh Manager installed successfully."
 }
 
-
-# Update Wazuh configuration
 update_configuration() {
     info "Updating Wazuh configuration..."
     sed -i 's|<logall_json>.*</logall_json>|<logall_json>yes</logall_json>|' "$ossec_conf"
@@ -172,6 +170,12 @@ update_configuration() {
     sed -z -i 's|<indexer>\n[[:space:]]*<enabled>yes</enabled>|<indexer>\n    <enabled>no</enabled>|' "$ossec_conf"
     sed -z -i 's|<syscheck>\n[[:space:]]*<disabled>no</disabled>|<syscheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
     info "Wazuh configuration updated successfully."
+}
+
+enable_windows_eventlog_rule_testing(){
+    # Wazuh checks event logs by the source
+    # But to test it, we must ensure it accepts json logs
+    sed -i '/<rule id="60000"/,/\/rule>/ { s|<decoded_as>.*</decoded_as>|<decoded_as>json</decoded_as>|/<category>/d}' /var/ossec/ruleset/rules/0575-win-base_rules.xml
 }
 
 create_empty_folders() {
@@ -275,22 +279,22 @@ ask_for_user_files() {
 
 configure_permissions() {
     info "Configuring permissions for rules and decoders..."
-    
+
     # Set permissions for the rules directory
     chown root:wazuh "$rules_dir"
     chmod 770 "$rules_dir"
-    
+
     if [[ -n $(find "$rules_dir" -type f) ]]; then
         chown wazuh:wazuh "$rules_dir"/*
         chmod 660 "$rules_dir"/*
     else
         warn "No files found in $rules_dir, skipping file permissions."
     fi
-    
+
     # Set permissions for the decoders directory
     chown root:wazuh "$decoders_dir"
     chmod 770 "$decoders_dir"
-    
+
     if [[ -n $(find "$decoders_dir" -type f) ]]; then
         chown wazuh:wazuh "$decoders_dir"/*
         chmod 660 "$decoders_dir"/*
@@ -365,6 +369,7 @@ main() {
     detect_distro_and_install
     install_wazuh_manager
     update_configuration
+    enable_windows_eventlog_rule_testing
     create_empty_folders
     setup_bind_mounts
     ask_for_user_files
