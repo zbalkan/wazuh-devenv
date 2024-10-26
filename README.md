@@ -21,6 +21,50 @@ You are ready to update and test your logs locally. You can combine the script i
 
 The sample rules are taken from the Wazuh blog [Creating decoders and rules from scratch](https://wazuh.com/blog/creating-decoders-and-rules-from-scratch/).
 
+
+## Usage
+
+```shell
+usage: tester.py [-h] [--enable-builtin] [--verbosity {0,1,2}]
+
+tester (0.1) is a Wazuh rule and decoder testing tool.
+
+options:
+  -h, --help           show this help message and exit
+  --enable-builtin     Enable running built-in rule tests. Disabled by default.
+  --verbosity {0,1,2}  Set verbosity level for test output (0, 1, or 2). Default is 1.
+```
+
+If you are using VS Code, you can use this debug configuration as a starter:
+```json
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run custom tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Run built-in and custom tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--enable-builtin"
+            ]
+        }
+    ]
+}
+```
+
+
 ## Permissions
 
 When you add new files, you must ensure the file permissions are set as expected. The expected permissions are `660` and owners are `wazuh:wazuh`. Hence, your user is added to the members of `wazuh` group for easier coexistence.
