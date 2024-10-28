@@ -1,26 +1,26 @@
 # wazuh-devenv
 
-The project aims to create a development environment for detection engieers using Wazuh. While it is designed to utilize a wazuh-manager installed on WSL, allowing testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for te future.
+The project aims to create a development environment for detection engieers using Wazuh. While it is designed to utilize a wazuh-manager installed on WSL to allow testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for te future.
 
 ## Setup for WSL
 
 1. Ensure a WSL instance running in your environment. The distribution that matches the Production deployment is better.
-2. Clone the repo to the preferred location for development. For me, using `~/wazuh-devenv` is easier.
-3. Run the script `sudo ./install.sh` to start installation.
-4. The script will ask you to copy rules and decoders to the new locations. When you copied them, hit `y` and continue. Otherwise it will rollback the changes.
-5. The script will ask you to provide the username you will use in wsl for development. Ensure you typed it correctly.
-6. The installation and configuration will be completed successfully. If there are any errors, there will be warnings for the user to fix manually.
-7. Initiate VS Code from the WSL for first engagement.
-8. You should be able to read and access rules from the repository. Add the rules and decoders folders to git.
-9. Remove the origin from Github to prevent accidentally leaking your rules to public repositories by running `git remote rm origin`.
-10. Add your organization's git repository for further use `git remote add origin <URL>`.
+2. Limit the WSL memory usage in `~/wsl.config` by adding `memory=16GB` or however you like. Wazuh is allocating as much memory as it can, so it is better to limit WSL as a whole. 
+3. Clone the repo to the preferred location for development. For me, using `~/wazuh-devenv` is easier.
+4. Run the script `sudo ./install.sh` to start installation.
+5. The script will ask you to copy rules and decoders to the new locations. After you copied them, hit `y` and continue. Otherwise it will rollback the changes.
+6. The script will ask you to provide the username you are going to use in WSL for development. Ensure you typed it correctly.
+7. The installation and configuration will be completed successfully. If any error occurs, messages would be displayed for the user to fix the issues manually.
+8. Initiate VS Code from the WSL for first engagement by navigating to the repository -such as `~/wazuh-devenv`, and typing `code .`. You don't have to keep the WSL terminal on afterwards.
+9. Remove the origin from Github to prevent accidentally leaking your rules and decoders to public repositories by running `git remote rm origin`.
+10. Add your organization's git repository for further use `git remote add origin <URL>`. You
+12. You should be able to read and access rules from the repository. Add the rules and decoders to git.
 
 You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
 
 ## Sample rules
 
 The sample rules are taken from the Wazuh blog [Creating decoders and rules from scratch](https://wazuh.com/blog/creating-decoders-and-rules-from-scratch/).
-
 
 ## Usage
 
