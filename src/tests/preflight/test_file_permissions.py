@@ -4,7 +4,7 @@ import grp
 import os
 import pwd
 import stat
-import unittest
+import pytest
 
 
 def get_file_permissions(file_path):
@@ -26,63 +26,57 @@ def get_file_permissions(file_path):
     return permissions, owner, group
 
 
-class TestFilePermissions(unittest.TestCase):
-    def setUp(self) -> None:
-        # Define the file path and expected values
-        self.rules_path = "./rules"
-        self.decoders_path = "./decoders"
-        self.expected_permissions = 0o660  # Example: rwxr-xr-x
-        self.expected_owner = "wazuh"       # Expected owner
-        self.expected_group = "wazuh"       # Expected group
+@pytest.fixture
+def file_permissions_data():
+    """Fixture for commonly used paths and expected values."""
+    return {
+        "rules_path": "./rules",
+        "decoders_path": "./decoders",
+        "expected_permissions": 0o660,  # Example: rw-rw----
+        "expected_owner": "wazuh",
+        "expected_group": "wazuh"
+    }
 
-    def test_rules_folder_exists(self) -> None:
-        # Test if the file exists
-        self.assertTrue(os.path.exists(self.rules_path),
-                        f"File not found: {self.rules_path}")
 
-    def test_decoders_folder_exists(self) -> None:
-        # Test if the file exists
-        self.assertTrue(os.path.exists(self.decoders_path),
-                        f"File not found: {self.decoders_path}")
+def test_rules_folder_exists(file_permissions_data):
+    # Test if the rules folder exists
+    assert os.path.exists(file_permissions_data["rules_path"]), \
+        f"File not found: {file_permissions_data['rules_path']}"
 
-    def test_rule_permissions(self) -> None:
 
-        for root, dirs, files in os.walk(self.rules_path):
-            for file in files:
-                path: str = os.path.join(root, file)
+def test_decoders_folder_exists(file_permissions_data):
+    # Test if the decoders folder exists
+    assert os.path.exists(file_permissions_data["decoders_path"]), \
+        f"File not found: {file_permissions_data['decoders_path']}"
 
-                # Test file permissions, owner, and group
-                permissions, owner, group = get_file_permissions(path)
 
-                # Assert that the permissions are correct
-                self.assertEqual(permissions, self.expected_permissions,
-                                f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
+def test_rule_permissions(file_permissions_data):
+    # Check permissions, owner, and group for files in the rules path
+    for root, _, files in os.walk(file_permissions_data["rules_path"]):
+        for file in files:
+            path = os.path.join(root, file)
+            permissions, owner, group = get_file_permissions(path)
 
-                # Assert that the owner is correct
-                self.assertEqual(owner, self.expected_owner,
-                                f"Owner for {path} is {owner}, expected {self.expected_owner}")
+            # Assert file permissions, owner, and group
+            assert permissions == file_permissions_data["expected_permissions"], \
+                f"Permissions for {path} are {oct(permissions)}, expected {oct(file_permissions_data['expected_permissions'])}"
+            assert owner == file_permissions_data["expected_owner"], \
+                f"Owner for {path} is {owner}, expected {file_permissions_data['expected_owner']}"
+            assert group == file_permissions_data["expected_group"], \
+                f"Group for {path} is {group}, expected {file_permissions_data['expected_group']}"
 
-                # Assert that the group is correct
-                self.assertEqual(group, self.expected_group,
-                                f"Group for {path} is {group}, expected {self.expected_group}")
 
-    def test_decoder_permissions(self) -> None:
+def test_decoder_permissions(file_permissions_data):
+    # Check permissions, owner, and group for files in the decoders path
+    for root, _, files in os.walk(file_permissions_data["decoders_path"]):
+        for file in files:
+            path = os.path.join(root, file)
+            permissions, owner, group = get_file_permissions(path)
 
-        for root, dirs, files in os.walk(self.decoders_path):
-            for file in files:
-                path: str = os.path.join(root, file)
-
-                # Test file permissions, owner, and group
-                permissions, owner, group = get_file_permissions(path)
-
-                # Assert that the permissions are correct
-                self.assertEqual(permissions, self.expected_permissions,
-                                 f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
-
-                # Assert that the owner is correct
-                self.assertEqual(owner, self.expected_owner,
-                                 f"Owner for {path} is {owner}, expected {self.expected_owner}")
-
-                # Assert that the group is correct
-                self.assertEqual(group, self.expected_group,
-                                 f"Group for {path} is {group}, expected {self.expected_group}")
+            # Assert file permissions, owner, and group
+            assert permissions == file_permissions_data["expected_permissions"], \
+                f"Permissions for {path} are {oct(permissions)}, expected {oct(file_permissions_data['expected_permissions'])}"
+            assert owner == file_permissions_data["expected_owner"], \
+                f"Owner for {path} is {owner}, expected {file_permissions_data['expected_owner']}"
+            assert group == file_permissions_data["expected_group"], \
+                f"Group for {path} is {group}, expected {file_permissions_data['expected_group']}"

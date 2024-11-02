@@ -2,29 +2,33 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
-import unittest
-
+import pytest
 from internal.logtest import LOGTEST_SOCKET, WazuhSocket
 
 
-class TestWazuhService(unittest.TestCase):
+def test_wazuh_service_exists() -> None:
+    """Check if Wazuh service exists in systemd or init.d."""
+    if_systemctl = os.path.exists('/etc/systemd/system/wazuh-manager.service')
+    if_initd = os.path.exists('/etc/init.d/wazuh-manager')
+    assert if_systemctl or if_initd, "Wazuh service is not installed."
 
-    def test_1_wazuh_service_exists(self) -> None:
-        if_systemctl = os.path.exists('/etc/systemd/system/wazuh-manager.service')
-        if_initd = os.path.exists('/etc/init.d/wazuh-manager')
-        self.assertTrue(if_systemctl or if_initd)
 
-    def test_2_logtest_socket_exists(self) -> None:
-        assert os.path.exists(LOGTEST_SOCKET)
+def test_logtest_socket_exists() -> None:
+    """Verify that the logtest socket exists."""
+    assert os.path.exists(
+        LOGTEST_SOCKET), f"Logtest socket not found at {LOGTEST_SOCKET}"
 
-    def test_3_wazuh_service_running(self) -> None:
-        # Run the pgrep command with -fl to match the process name and show the full command line
-        result = subprocess.run(['pgrep', '-fl', 'wazuh-analysisd'],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
 
-        # Check if any output was returned, meaning processes were found
-        self.assertNotEqual(result.stdout, '')
+def test_wazuh_service_running() -> None:
+    """Check if Wazuh service is running."""
+    result = subprocess.run(
+        ['pgrep', '-fl', 'wazuh-analysisd'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False
+    )
+    assert result.stdout != '', "Wazuh analysisd process is not running."
 
-    def test_4_logtest_socket_open(self) -> None:
-        socket = WazuhSocket(LOGTEST_SOCKET)
-        self.assertTrue(socket.is_socket_open())
+
+def test_logtest_socket_open() -> None:
+    """Verify that the logtest socket is open."""
+    socket = WazuhSocket(LOGTEST_SOCKET)
+    assert socket.is_socket_open(), "Logtest socket is not open."
