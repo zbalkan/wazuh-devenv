@@ -178,6 +178,16 @@ enable_windows_eventlog_rule_testing(){
     sed -i '/<rule id="60000"/,/\/rule>/ { s|<decoded_as>.*</decoded_as>|<decoded_as>json</decoded_as>|/<category>/d}' /var/ossec/ruleset/rules/0575-win-base_rules.xml
 }
 
+optimize_for_rule_test(){
+    # Optimize the configuration for rule testing
+    # This is not necessary, but it can speed up the process
+    sed -i '/<rule_test>/,/<\\/rule_test>/ {
+    s|<threads>.*</threads>|<threads>auto</threads>|
+    s|<max_sessions>.*</max_sessions>|<max_sessions>500</max_sessions>|
+    s|<session_timeout>.*</session_timeout>|<session_timeout>1m</session_timeout>|
+    }' "$ossec_conf"
+}
+
 create_empty_folders() {
     info "Creating directories for custom rules and decoders..."
     mkdir -p "$rules_dir"
@@ -370,6 +380,7 @@ main() {
     install_wazuh_manager
     update_configuration
     enable_windows_eventlog_rule_testing
+    optimize_for_rule_test
     create_empty_folders
     setup_bind_mounts
     ask_for_user_files
