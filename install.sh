@@ -60,32 +60,24 @@ rules_dir=$(realpath ./rules)
 ossec_conf="/var/ossec/etc/ossec.conf"
 PKG_MANAGER=""
 
-# Detect distribution and set package manager
-detect_distro_and_install() {
-    info "Detecting system distribution..."
-    if [[ -f /etc/os-release ]]; then
-        # shellcheck disable=SC1091
-        source /etc/os-release
-        DISTRO=$ID
+# Detect package manager
+detect_package_manager() {
+    info "Detecting available package manager..."
+
+    if [ -x "$(command -v apt-get)" ]; then
+        info "Detected APT package manager."
+        PKG_MANAGER="APT"
+    elif [ -x "$(command -v dnf)" ]; then
+        # Since dnf is the modern replacement for yum, it is checked first.
+        info "Detected DNF package manager."
+        PKG_MANAGER="YUM"
+    elif [ -x "$(command -v yum)" ]; then
+        info "Detected YUM package manager."
+        PKG_MANAGER="YUM"
     else
-        error "Unable to detect distribution. Exiting..."
+        error "No supported package manager found (APT or YUM/DNF). Exiting..."
         exit 1
     fi
-
-    case "$DISTRO" in
-    ubuntu|debian)
-        info "Detected Debian-based distribution: $DISTRO"
-        PKG_MANAGER="APT"
-        ;;
-    centos|rhel|ol|fedora|rocky|almalinux)
-        info "Detected RHEL-based distribution: $DISTRO"
-        PKG_MANAGER="YUM"
-        ;;
-    *)
-        error "Unsupported distribution: $DISTRO. Exiting..."
-        exit 1
-        ;;
-    esac
 }
 
 # Install Wazuh Manager based on the detected package manager
@@ -387,7 +379,7 @@ start_wazuh_service() {
 # main function
 main() {
     info "Starting Wazuh Manager setup..."
-    detect_distro_and_install
+    detect_package_manager
     install_wazuh_manager
     update_configuration
     enable_windows_eventlog_rule_testing
