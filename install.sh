@@ -195,17 +195,27 @@ update_configuration() {
 enable_windows_eventlog_rule_testing(){
     # Wazuh checks event logs by the source
     # But to test it, we must ensure it accepts json logs
-    sed -i '/<rule id="60000"/,/\/rule>/ { s|<decoded_as>.*</decoded_as>|<decoded_as>json</decoded_as>|/<category>/d}' /var/ossec/ruleset/rules/0575-win-base_rules.xml
+    info "Enabling JSON logs for Windows event log rules..."
+sed -i '/<rule id="60000"/,/<\/rule>/ {
+    s|^\(\s*\)<category>|\1<!-- category|; s|</category>$|</category -->|
+    s|^\(\s*\)<decoded_as>|\1<!-- decoded_as|; s|</decoded_as>$|</decoded_as -->|
+    /<!-- decoded_as>/a\
+    <decoded_as>json</decoded_as>
+}' /var/ossec/ruleset/rules/0575-win-base_rules.xml
 }
 
 optimize_for_rule_test(){
     # Optimize the configuration for rule testing
     # This is not necessary, but it can speed up the process
-    sed -i '/<rule_test>/,/<\\/rule_test>/ {
-    s|<threads>.*</threads>|<threads>auto</threads>|
-    s|<max_sessions>.*</max_sessions>|<max_sessions>500</max_sessions>|
-    s|<session_timeout>.*</session_timeout>|<session_timeout>1m</session_timeout>|
-    }' "$ossec_conf"
+
+    info "Optimizing Wazuh configuration for rule testing..."
+    info "Setting threads to auto, max_sessions to 500, and session_timeout to 1m..."
+    info "This is to speed up the rule testing process."
+sed -Ei '/<rule_test>/,/<\/rule_test>/ {
+s|<threads>.*</threads>|<threads>auto</threads>|
+s|<max_sessions>.*</max_sessions>|<max_sessions>500</max_sessions>|
+s|<session_timeout>.*</session_timeout>|<session_timeout>1m</session_timeout>|
+}' "$ossec_conf"
 }
 
 create_empty_folders() {
