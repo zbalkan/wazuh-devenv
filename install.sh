@@ -166,19 +166,27 @@ update_configuration() {
     info "Updating Wazuh configuration..."
 
     # Update ossec.conf to enable JSON logging and disable unnecessary modules
+    info "Enabling JSON logging and disabling unnecessary modules..."
     sed -i 's|<logall_json>.*</logall_json>|<logall_json>yes</logall_json>|' "$ossec_conf"
     sed -i 's|<logging>\n[[:space:]]*<log_format>.*</log_format>|<logging>\n    <log_format>plain,json</log_format>|' "$ossec_conf"
 
     # Disable syscollector, rootcheck, indexer, and syscheck (FIM) modules
+    info "Disabling syscollector module..."
     sed -z -i 's|<wodle name="syscollector">\n[[:space:]]*<disabled>no</disabled>|<wodle name="syscollector">\n    <disabled>yes</disabled>|' "$ossec_conf"
+
+    info "Disabling rootcheck module..."
     sed -z -i 's|<rootcheck>\n[[:space:]]*<disabled>no</disabled>|<rootcheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
+
+    info "Disabling indexer module..."
     sed -z -i 's|<indexer>\n[[:space:]]*<enabled>yes</enabled>|<indexer>\n    <enabled>no</enabled>|' "$ossec_conf"
+
+    info "Disabling syscheck module..."
     sed -z -i 's|<syscheck>\n[[:space:]]*<disabled>no</disabled>|<syscheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
 
-    # Disable SCA (Security Configuration Assessment)
+    info "Disabling SCA module..."
     sed -z -i 's|<sca>\n[[:space:]]*<enabled>yes</enabled>|<sca>\n    <enabled>no</enabled>|' "$ossec_conf"
 
-    # Disable Vulnerability Detection
+    info "Disabling Vulnerability Detection module..."
     sed -z -i 's|<vulnerability-detection>\n[[:space:]]*<enabled>yes</enabled>|<vulnerability-detection>\n    <enabled>no</enabled>|' "$ossec_conf"
 
     info "Wazuh configuration updated successfully."
