@@ -93,7 +93,7 @@ install_wazuh_manager() {
     fi
 }
 
-# Functions for Debian-based systems
+# Functions for APT
 setup_apt_repo_and_install() {
     info "Installing necessary APT dependencies..."
     apt-get install -y gnupg apt-transport-https
@@ -120,9 +120,15 @@ setup_apt_repo_and_install() {
     info "Installing Wazuh Manager..."
     apt-get -y install wazuh-manager
     info "Wazuh Manager installed successfully."
+
+    info "Disabling Wazuh repository after installation to prevent accidental upgrades that could break the environment..."
+    sed -i "s|^deb |#deb |" /etc/apt/sources.list.d/wazuh.list
+    info "APT repository for Wazuh disabled. You can re-enable it manually if needed."
+    info "Running apt-get update to refresh package list..."
+    apt update
 }
 
-# Functions for RHEL-based systems
+# Functions for YUM
 setup_yum_repo_and_install() {
     info "Checking if Wazuh GPG key is already imported..."
     if rpm -qa gpg-pubkey | grep -q "$(curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --with-fingerprint 2>/dev/null | grep 'Key fingerprint' | awk '{print $4$5$6$7$8$9$10}')"; then
@@ -151,19 +157,9 @@ EOF
     info "Installing Wazuh Manager..."
     yum -y install wazuh-manager
     info "Wazuh Manager installed successfully."
-}
 
-disable_wazuh_repo(){
-    info "Disabling the Wazuh package repositories after installation to prevent accidental upgrades that could break the environment...."
-    if [[ "$PKG_MANAGER" == "APT" ]]; then
-        sed -i "s/^deb /#deb /" /etc/apt/sources.list.d/wazuh.list
-        apt update
-    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
-        sed -i "s/^enabled=1/enabled=0/" /etc/yum.repos.d/wazuh.repo
-    else
-        error "Unknown package manager: $PKG_MANAGER. Exiting..."
-        exit 1
-    fi
+    info "Disabling Wazuh repository after installation to prevent accidental upgrades that could break the environment..."
+    sed -i "s|^enabled=1|enabled=0|" /etc/yum.repos.d/wazuh.repo
 }
 
 update_configuration() {
@@ -394,7 +390,6 @@ main() {
     info "Starting Wazuh Manager setup..."
     detect_package_manager
     install_wazuh_manager
-    disable_wazuh_repo
     update_configuration
     enable_windows_eventlog_rule_testing
     optimize_for_rule_test
