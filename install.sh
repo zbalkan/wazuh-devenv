@@ -153,6 +153,19 @@ EOF
     info "Wazuh Manager installed successfully."
 }
 
+disable_wazuh_repo(){
+    info "Disabling the Wazuh package repositories after installation to prevent accidental upgrades that could break the environment...."
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        sed -i "s/^deb /#deb /" /etc/apt/sources.list.d/wazuh.list
+        apt update
+    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
+        sed -i "s/^enabled=1/enabled=0/" /etc/yum.repos.d/wazuh.repo
+    else
+        error "Unknown package manager: $PKG_MANAGER. Exiting..."
+        exit 1
+    fi
+}
+
 update_configuration() {
     info "Updating Wazuh configuration..."
 
@@ -381,6 +394,7 @@ main() {
     info "Starting Wazuh Manager setup..."
     detect_package_manager
     install_wazuh_manager
+    disable_wazuh_repo
     update_configuration
     enable_windows_eventlog_rule_testing
     optimize_for_rule_test
