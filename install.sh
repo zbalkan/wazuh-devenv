@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
 
 LOGFILE="/var/log/wazuh_setup.log"
-exec > >(tee -a "$LOGFILE") 2>&1
-
-# Lock to prevent multiple instances from running concurrently
 LOCKFILE="/var/lock/wazuh-setup.lock"
-exec 200>$LOCKFILE
 
-# Release lock on exit or error
-trap 'flock -u 200' EXIT
+# Ensure stdout and stderr are logged
+exec > >(tee -a "$LOGFILE") 2>&1
+exec 2> >(tee -a "$LOGFILE" >&2)
 
-flock -n 200 || { echo "Another instance of the script is running. Exiting..."; exit 1; }
+# Ensure only one instance of the script runs
+exec 200>"$LOCKFILE"
 
+# Try to acquire lock, fail if another instance is running
+if ! flock -n 200; then
+    error "[ERROR] Another instance of the script is running (Lock file: $LOCKFILE). Exiting..."
+    exit 1
+fi
+
+# Trap cleanup function on exit, script crash, or termination signal
+cleanup() {
+    info "Cleaning up and releasing lock..."
+    flock -u 200  # Unlock file
+    rm -f "$LOCKFILE"
+}
+trap cleanup EXIT SIGINT SIGTERM
 
 # Function to display informational messages
 info() {
