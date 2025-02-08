@@ -131,6 +131,23 @@ If you are using VS Code, you can use this debug configuration as a starter:
     ]
 }
 ```
+## Logs
+
+You can find the tester logs in `/var/ossec/logs/tester.log`.
+
+```plaintext
+2025-02-08T19:27:50+0000:root:INFO:Starting tester v0.1
+2025-02-08T19:27:50+0000:root:INFO:tester (0.1) is a Wazuh rule and decoder testing tool.
+2025-02-08T19:27:50+0000:root:INFO:{"test_result": {"status": "FAILED", "ran": 8, "successful": 7, "failed": 1, "errored": 0, "failures": ["test_1_wazuh_service_exists (tests.preflight_tests.test_wazuh_service.TestWazuhService.test_1_wazuh_service_exists)"], "errors": []}}
+2025-02-08T19:27:50+0000:root:ERROR:Preflight tests failed. Exiting.
+2025-02-08T19:55:10+0000:root:INFO:Starting tester v0.1
+2025-02-08T19:55:10+0000:root:INFO:tester (0.1) is a Wazuh rule and decoder testing tool.
+2025-02-08T19:55:13+0000:root:INFO:{"test_result": {"status": "OK", "ran": 8, "successful": 8, "failed": 0, "errored": 0, "failures": [], "errors": []}}
+2025-02-08T20:13:27+0000:root:INFO:{"test_result": {"status": "OK", "ran": 1635, "successful": 1635, "failed": 0, "errored": 0, "failures": [], "errors": []}}
+2025-02-08T20:13:28+0000:root:INFO:{"test_result": {"status": "OK", "ran": 2, "successful": 2, "failed": 0, "errored": 0, "failures": [], "errors": []}}
+2025-02-08T20:13:28+0000:root:INFO:{"test_result": {"status": "OK", "ran": 0, "successful": 0, "failed": 0, "errored": 0, "failures": [], "errors": []}}
+2025-02-08T20:13:28+0000:root:INFO:Exiting.
+```
 
 ## Permissions
 
