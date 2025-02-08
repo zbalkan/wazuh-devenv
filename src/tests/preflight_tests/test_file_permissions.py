@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
+
 import grp
 import os
 import pwd
@@ -56,15 +56,15 @@ class TestFilePermissions(unittest.TestCase):
 
                 # Assert that the permissions are correct
                 self.assertEqual(permissions, self.expected_permissions,
-                                f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
+                                 f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
 
                 # Assert that the owner is correct
                 self.assertEqual(owner, self.expected_owner,
-                                f"Owner for {path} is {owner}, expected {self.expected_owner}")
+                                 f"Owner for {path} is {owner}, expected {self.expected_owner}")
 
                 # Assert that the group is correct
                 self.assertEqual(group, self.expected_group,
-                                f"Group for {path} is {group}, expected {self.expected_group}")
+                                 f"Group for {path} is {group}, expected {self.expected_group}")
 
     def test_decoder_permissions(self) -> None:
 
