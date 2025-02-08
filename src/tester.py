@@ -41,10 +41,10 @@ def main(enable_builtin: bool, verbosity: int) -> None:
 
     # Conditionally run built-in rule tests if enabled
     if enable_builtin:
-        run_tests('tests.builtin', verbosity=verbosity)
+        run_tests('tests.regression_tests.builtin', verbosity=verbosity)
 
     # Run custom rule tests
-    run_tests('tests.custom', verbosity=verbosity)
+    run_tests('tests.regression_tests.custom', verbosity=verbosity)
 
 
 def setup_logging() -> None:
