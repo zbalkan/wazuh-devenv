@@ -162,34 +162,68 @@ EOF
     sed -i "s|^enabled=1|enabled=0|" /etc/yum.repos.d/wazuh.repo
 }
 
+check_sed_z_support() {
+    if ! echo -e "line1\nline2" | sed -z 's/line1/changed/' &>/dev/null; then
+        warn "Your version of sed does not support -z (zero-separated mode)."
+        warn "Automatic configuration updates using sed -z will be skipped."
+        warn "You must manually update the Wazuh configuration file."
+
+        echo -e "\n===== MANUAL CONFIGURATION INSTRUCTIONS ====="
+        echo "1. Open the Wazuh configuration file:"
+        echo "   sudo nano /var/ossec/etc/ossec.conf"
+        echo ""
+        echo "2. Make the following changes manually:"
+        echo "   - Change <logall_json> to <logall_json>yes</logall_json>"
+        echo "   - Change the <log_format> inside <logging> to: plain,json"
+        echo "   - Set <disabled>yes</disabled> inside the following modules:"
+        echo "     * <wodle name=\"syscollector\">"
+        echo "     * <rootcheck>"
+        echo "     * <syscheck>"
+        echo "     * <sca>"
+        echo "   - Set <enabled>no</enabled> inside:"
+        echo "     * <indexer>"
+        echo "     * <vulnerability-detection>"
+        echo ""
+        echo "3. Save the file (Ctrl+X, then Y, then Enter)."
+        echo "4. Restart Wazuh Manager: sudo systemctl restart wazuh-manager"
+        echo "============================================="
+        return 1  # Indicate failure, but script should continue
+    fi
+    return 0  # Indicate success
+}
+
 update_configuration() {
     info "Updating Wazuh configuration..."
 
-    # Update ossec.conf to enable JSON logging and disable unnecessary modules
-    info "Enabling JSON logging and disabling unnecessary modules..."
-    sed -i 's|<logall_json>.*</logall_json>|<logall_json>yes</logall_json>|' "$ossec_conf"
-    sed -i 's|<logging>\n[[:space:]]*<log_format>.*</log_format>|<logging>\n    <log_format>plain,json</log_format>|' "$ossec_conf"
+    # Check if sed -z is supported before making changes
+    if check_sed_z_support; then
+        info "sed -z supported. Applying automatic configuration updates..."
 
-    # Disable syscollector, rootcheck, indexer, and syscheck (FIM) modules
-    info "Disabling syscollector module..."
-    sed -z -i 's|<wodle name="syscollector">\n[[:space:]]*<disabled>no</disabled>|<wodle name="syscollector">\n    <disabled>yes</disabled>|' "$ossec_conf"
+        sed -i 's|<logall_json>.*</logall_json>|<logall_json>yes</logall_json>|' "$ossec_conf"
+        sed -i 's|<logging>\n[[:space:]]*<log_format>.*</log_format>|<logging>\n    <log_format>plain,json</log_format>|' "$ossec_conf"
 
-    info "Disabling rootcheck module..."
-    sed -z -i 's|<rootcheck>\n[[:space:]]*<disabled>no</disabled>|<rootcheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
+        info "Disabling syscollector module..."
+        sed -z -i 's|<wodle name="syscollector">\n[[:space:]]*<disabled>no</disabled>|<wodle name="syscollector">\n    <disabled>yes</disabled>|' "$ossec_conf"
 
-    info "Disabling indexer module..."
-    sed -z -i 's|<indexer>\n[[:space:]]*<enabled>yes</enabled>|<indexer>\n    <enabled>no</enabled>|' "$ossec_conf"
+        info "Disabling rootcheck module..."
+        sed -z -i 's|<rootcheck>\n[[:space:]]*<disabled>no</disabled>|<rootcheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
 
-    info "Disabling syscheck module..."
-    sed -z -i 's|<syscheck>\n[[:space:]]*<disabled>no</disabled>|<syscheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
+        info "Disabling indexer module..."
+        sed -z -i 's|<indexer>\n[[:space:]]*<enabled>yes</enabled>|<indexer>\n    <enabled>no</enabled>|' "$ossec_conf"
 
-    info "Disabling SCA module..."
-    sed -z -i 's|<sca>\n[[:space:]]*<enabled>yes</enabled>|<sca>\n    <enabled>no</enabled>|' "$ossec_conf"
+        info "Disabling syscheck module..."
+        sed -z -i 's|<syscheck>\n[[:space:]]*<disabled>no</disabled>|<syscheck>\n    <disabled>yes</disabled>|' "$ossec_conf"
 
-    info "Disabling Vulnerability Detection module..."
-    sed -z -i 's|<vulnerability-detection>\n[[:space:]]*<enabled>yes</enabled>|<vulnerability-detection>\n    <enabled>no</enabled>|' "$ossec_conf"
+        info "Disabling SCA module..."
+        sed -z -i 's|<sca>\n[[:space:]]*<enabled>yes</enabled>|<sca>\n    <enabled>no</enabled>|' "$ossec_conf"
 
-    info "Wazuh configuration updated successfully."
+        info "Disabling Vulnerability Detection module..."
+        sed -z -i 's|<vulnerability-detection>\n[[:space:]]*<enabled>yes</enabled>|<vulnerability-detection>\n    <enabled>no</enabled>|' "$ossec_conf"
+
+        info "Wazuh configuration updated successfully."
+    else
+        warn "Skipping automatic configuration updates. Please follow the manual instructions."
+    fi
 }
 
 enable_windows_eventlog_rule_testing(){
