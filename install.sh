@@ -110,13 +110,28 @@ detect_package_manager() {
 
 # Install Wazuh Manager based on the detected package manager
 install_wazuh_manager() {
-    info "Installing Wazuh Manager..."
+    info "Checking if Wazuh Manager is already installed..."
+
     if [[ "$PKG_MANAGER" == "APT" ]]; then
-        setup_apt_repo_and_install
+        if apt show wazuh-manager 2>/dev/null | grep -q "Installed: "; then
+            installed_version=$(apt show wazuh-manager 2>/dev/null | grep "Installed:" | awk '{print $2}')
+            info "Wazuh Manager is already installed (Version: $installed_version). Skipping installation."
+            return 0
+        else
+            info "Wazuh Manager is not installed. Proceeding to install..."
+            setup_apt_repo_and_install
+        fi
     elif [[ "$PKG_MANAGER" == "YUM" ]]; then
-        setup_yum_repo_and_install
+        if yum info wazuh-manager 2>/dev/null | grep -q "Installed Packages"; then
+            installed_version=$(yum info wazuh-manager 2>/dev/null | grep "Version" | awk '{print $3}')
+            info "Wazuh Manager is already installed (Version: $installed_version). Skipping installation."
+            return 0
+        else
+            info "Wazuh Manager is not installed. Proceeding to install..."
+            setup_yum_repo_and_install
+        fi
     else
-        error "Unknown package manager: $PKG_MANAGER. Exiting..."
+        error "Unknown package manager detected: $PKG_MANAGER. Exiting..."
         exit 1
     fi
 }
