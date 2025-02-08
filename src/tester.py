@@ -13,6 +13,7 @@ APP_NAME: Final[str] = 'wazuh-devenv tester'
 APP_VERSION: Final[str] = '0.2'
 DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decoder testing tool."
 ENCODING: Final[str] = "utf-8"
+LOG_PATH: Final[str] = os.path.join('/var/ossec/logs/tester.log')
 
 
 def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 1) -> Optional[unittest.result.TestResult]:
@@ -52,14 +53,16 @@ def main(disable_preflight: bool = False, disable_builtin: bool = False, disable
     if disable_behavioral is False:
         run_tests('tests.behavioral_tests', verbosity=verbosity)
 
+    print('All tests completed. Exiting.')
+    print(f"See the logs at {LOG_PATH}")
+
 
 def setup_logging() -> None:
-    log_path = os.path.join(f'/var/ossec/logs/{APP_NAME}.log')
     logging.basicConfig(
-        filename=os.path.join(log_path),
+        filename=os.path.join(LOG_PATH),
         encoding=ENCODING,
-        format='%(asctime)s:%(name)s:%(levelname)s:%(message)s',
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
+        format="%(asctime)s.%(msecs)03d:%(name)s:%(levelname)s:%(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
         level=logging.INFO
     )
 

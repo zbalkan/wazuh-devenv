@@ -232,6 +232,8 @@ EOF
         exit 1
     fi
     info "Wazuh Manager installed successfully."
+    info "Installed version:"
+    /var/ossec/bin/wazuh-control info
 
     info "Disabling Wazuh repository after installation to prevent accidental upgrades..."
     sed -i "s|^enabled=1|enabled=0|" /etc/yum.repos.d/wazuh.repo
@@ -511,6 +513,29 @@ start_wazuh_service() {
     fi
 }
 
+validate_configuration(){
+    info "Validating Wazuh configuration..."
+    info "Validating Syscheck/Rootcheck"
+    if ! /var/ossec/bin/wazuh-syscheckd -t; then
+        echo "Command failed"
+        exit 1
+    fi
+    info "Validating local files"
+    if ! /var/ossec/bin/wazuh-logcollector -t; then
+        echo "Command failed"
+        exit 1
+    fi
+    info "Validating Wodles"
+    if ! /var/ossec/bin/wazuh-modulesd -t; then
+        echo "Command failed"
+        exit 1
+    fi
+    info "Validating global/rules/decoders"
+    if ! /var/ossec/bin/wazuh-analysisd -t; then
+        echo "Command failed"
+        exit 1
+    fi
+}
 
 # main function
 main() {
@@ -527,6 +552,7 @@ main() {
     configure_permissions
     add_user_to_wazuh_group
     start_wazuh_service
+    validate_configuration
     info "Wazuh Manager setup completed successfully."
 }
 
