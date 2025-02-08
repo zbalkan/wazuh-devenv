@@ -82,6 +82,8 @@ chown wazuh:wazuh "$decoders_dir"/*
 chmod 660 "$decoders_dir"/*
 ```
 
+These commands are already provided in the `fix_permissions.sh`.
+
 If your filesystem supports ACLs, `setfacl` is a good helper. Using the commands, you can ensure the future files will use the correct permissions. Since it is not universal, this change is optional.
 
 ```shell
