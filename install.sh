@@ -124,46 +124,75 @@ install_wazuh_manager() {
 # Functions for APT
 setup_apt_repo_and_install() {
     info "Installing necessary APT dependencies..."
-    apt-get install -y gnupg apt-transport-https
+    if ! apt-get install -y gnupg apt-transport-https; then
+        error "Failed to install dependencies. Exiting..."
+        exit 1
+    fi
 
     info "Checking if Wazuh GPG key is already imported..."
     if gpg --list-keys --keyring /usr/share/keyrings/wazuh.gpg | grep -q "Wazuh"; then
         info "Wazuh GPG key is already imported."
     else
         info "Adding Wazuh GPG key for APT..."
-        curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && chmod 644 /usr/share/keyrings/wazuh.gpg
+        if ! curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH -o /tmp/GPG-KEY-WAZUH; then
+            error "Failed to download Wazuh GPG key. Check network connectivity."
+            exit 1
+        fi
+
+        if ! gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import /tmp/GPG-KEY-WAZUH; then
+            error "Failed to import Wazuh GPG key."
+            exit 1
+        fi
+        chmod 644 /usr/share/keyrings/wazuh.gpg
+        rm -f /tmp/GPG-KEY-WAZUH
     fi
 
     info "Checking if Wazuh APT repository is already configured..."
-    if grep -q "https://packages.wazuh.com/4.x/apt/" /etc/apt/sources.list.d/wazuh.list 2>/dev/null; then
+    if [[ -f /etc/apt/sources.list.d/wazuh.list ]] && grep -q "https://packages.wazuh.com/4.x/apt/" /etc/apt/sources.list.d/wazuh.list; then
         info "Wazuh APT repository is already configured."
     else
         info "Adding Wazuh APT repository..."
-        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list
+        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee /etc/apt/sources.list.d/wazuh.list
     fi
 
     info "Updating APT packages information..."
-    apt-get update
+    if ! apt-get update; then
+        error "Failed to update APT packages. Exiting..."
+        exit 1
+    fi
 
     info "Installing Wazuh Manager..."
-    apt-get -y install wazuh-manager
+    if ! apt-get -y install wazuh-manager; then
+        error "Failed to install Wazuh Manager. Exiting..."
+        exit 1
+    fi
     info "Wazuh Manager installed successfully."
 
-    info "Disabling Wazuh repository after installation to prevent accidental upgrades that could break the environment..."
+    info "Disabling Wazuh repository after installation to prevent accidental upgrades..."
     sed -i "s|^deb |#deb |" /etc/apt/sources.list.d/wazuh.list
     info "APT repository for Wazuh disabled. You can re-enable it manually if needed."
+
     info "Running apt-get update to refresh package list..."
-    apt update
+    apt-get update
 }
 
 # Functions for YUM
 setup_yum_repo_and_install() {
     info "Checking if Wazuh GPG key is already imported..."
-    if rpm -qa gpg-pubkey | grep -q "$(curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --with-fingerprint 2>/dev/null | grep 'Key fingerprint' | awk '{print $4$5$6$7$8$9$10}')"; then
+    if rpm -q gpg-pubkey &>/dev/null; then
         info "Wazuh GPG key is already imported."
     else
-        info "Importing Wazuh GPG key for YUM..."
-        rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH
+        info "Adding Wazuh GPG key for YUM..."
+        if ! curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH -o /tmp/GPG-KEY-WAZUH; then
+            error "Failed to download Wazuh GPG key. Check network connectivity."
+            exit 1
+        fi
+
+        if ! rpm --import /tmp/GPG-KEY-WAZUH; then
+            error "Failed to import Wazuh GPG key."
+            exit 1
+        fi
+        rm -f /tmp/GPG-KEY-WAZUH
     fi
 
     info "Checking if Wazuh repository is already configured..."
@@ -183,12 +212,16 @@ EOF
     fi
 
     info "Installing Wazuh Manager..."
-    yum -y install wazuh-manager
+    if ! yum -y install wazuh-manager; then
+        error "Failed to install Wazuh Manager. Exiting..."
+        exit 1
+    fi
     info "Wazuh Manager installed successfully."
 
-    info "Disabling Wazuh repository after installation to prevent accidental upgrades that could break the environment..."
+    info "Disabling Wazuh repository after installation to prevent accidental upgrades..."
     sed -i "s|^enabled=1|enabled=0|" /etc/yum.repos.d/wazuh.repo
 }
+
 
 check_sed_z_support() {
     if ! echo -e "line1\nline2" | sed -z 's/line1/changed/' &>/dev/null; then
