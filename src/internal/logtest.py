@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
 import json
 import logging
 import socket
@@ -9,6 +7,7 @@ from typing import Any, Final, Optional
 
 # The socket path is a constant since it's determined by Wazuh
 LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
+
 
 class WazuhDaemonProtocol:
     """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
@@ -59,12 +58,12 @@ class WazuhDaemonProtocol:
             raise ValueError(f'{error_n}: {error_msg}')
         return json_msg  # Return the entire message
 
+
 class WazuhSocket:
     """Handles communication with the Wazuh socket (includes message framing)."""
 
     def __init__(self, file: str) -> None:
         self.__file = file
-
 
     def is_socket_open(self) -> bool:
         """Check if the socket is open.
@@ -85,7 +84,6 @@ class WazuhSocket:
             return False  # Socket is closed or connection failed
         finally:
             s.close()  # Close the socket
-
 
     def send(self, msg: str) -> bytes:
         """Send and receive data to Wazuh socket with message size framing.
@@ -119,6 +117,7 @@ class WazuhSocket:
                 return recv_msg
         except socket.error as e:
             raise ConnectionError(f"Failed to communicate with Wazuh socket: {e}")
+
 
 class WazuhLogtest:
     """Interacts with the wazuh-logtest feature to process logs and manage sessions."""
@@ -189,7 +188,6 @@ class WazuhLogtest:
         except Exception as e:
             logging.error(f"Failed to remove session: {e}")
             return False
-
 
     def __remove_newlines(self, log: str) -> str:
         if (log[0] == '\n'):
@@ -266,6 +264,7 @@ class LogtestResponse:
                 return None
         return data
 
+
 def send_log(log: str, location: str = "stdin", log_format: str = "syslog", token: Optional[str] = None) -> LogtestResponse:
     """Send a log to Wazuh logtest and get the response.
 
@@ -287,6 +286,7 @@ def send_log(log: str, location: str = "stdin", log_format: str = "syslog", toke
     except Exception as e:
         logging.error('Error processing log: %s', e)
         raise
+
 
 def send_multiple_logs(logs: list[str], location: str = "stdin", log_format: str = "syslog", options: Optional[dict] = None) -> list[LogtestResponse]:
     """Send multiple logs to Wazuh logtest within the same session.

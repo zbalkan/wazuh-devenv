@@ -48,8 +48,7 @@ class ResultRunTests:
                 "failed": len(self.test_result.failures),
                 "errored": len(self.test_result.errors),
                 "failures": [str(failed_test) for failed_test, _ in self.test_result.failures] if self.test_result.failures else [],
-                "errors": [{'err': str(errored_test), 'traceback': traceback}
-                        for errored_test, traceback in self.test_result.errors] if self.test_result.errors else []
+                "errors": [{'err': str(errored_test), 'traceback': traceback} for errored_test, traceback in self.test_result.errors] if self.test_result.errors else []
             }
         }
 
