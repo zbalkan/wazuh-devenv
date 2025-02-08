@@ -9,8 +9,8 @@ from typing import Final, Optional
 
 from internal.result import ResultRunTests
 
-APP_NAME: Final[str] = 'tester'
-APP_VERSION: Final[str] = '0.1'
+APP_NAME: Final[str] = 'wazuh-devenv tester'
+APP_VERSION: Final[str] = '0.2'
 DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decoder testing tool."
 ENCODING: Final[str] = "utf-8"
 

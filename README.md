@@ -28,7 +28,7 @@ The sample rules are taken from the Wazuh blog [Creating decoders and rules from
 ```shell
 usage: tester.py [-h] [--disable-builtin] [--disable-custom] [--disable-behavioral] [--verbosity {0,1,2}]
 
-tester (0.1) is a Wazuh rule and decoder testing tool.
+wazuh-devenv tester (0.2) is a Wazuh rule and decoder testing tool.
 
 options:
   -h, --help            show this help message and exit
