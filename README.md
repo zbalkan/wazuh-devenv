@@ -13,7 +13,8 @@ The project aims to create a development environment for detection engieers usin
 7. The installation and configuration will be completed successfully. If any error occurs, messages would be displayed for the user to fix the issues manually.
 8. Initiate VS Code from the WSL for first engagement by navigating to the repository -such as `~/wazuh-devenv`, and typing `code .`. You don't have to keep the WSL terminal on afterwards.
 9. Remove the origin from Github to prevent accidentally leaking your rules and decoders to public repositories by running `git remote rm origin`.
-10. Add your organization's git repository for further use `git remote add origin <URL>`. You
+10. Add your organization's git repository for further use `git remote add origin <URL>`.
+11. Initiate your preference of Python virtual environment.
 12. You should be able to read and access rules from the repository. Add the rules and decoders to git.
 
 You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
@@ -25,17 +26,20 @@ The sample rules are taken from the Wazuh blog [Creating decoders and rules from
 ## Usage
 
 ```shell
-usage: tester.py [-h] [--enable-builtin] [--verbosity {0,1,2}]
+usage: tester.py [-h] [--disable-builtin] [--disable-custom] [--disable-behavioral] [--verbosity {0,1,2}]
 
 tester (0.1) is a Wazuh rule and decoder testing tool.
 
 options:
-  -h, --help           show this help message and exit
-  --enable-builtin     Enable running built-in rule tests. Disabled by default.
-  --verbosity {0,1,2}  Set verbosity level for test output (0, 1, or 2). Default is 1.
+  -h, --help            show this help message and exit
+  --disable-builtin     Disable running built-in rule tests for regression. Enabled by default.
+  --disable-custom      Disable running custom rule tests for regression. Enabled by default.
+  --disable-behavioral  Disable running behavioral tests. Enabled by default.
+  --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
 ```
 
 If you are using VS Code, you can use this debug configuration as a starter:
+
 ```json
 {
     // Use IntelliSense to learn about possible attributes.
@@ -44,26 +48,89 @@ If you are using VS Code, you can use this debug configuration as a starter:
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run custom tests",
+            "name": "Run all tests",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
         },
         {
-            "name": "Run built-in and custom tests",
+            "name": "Disable built-in",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
             "args": [
-                "--enable-builtin"
+                "--disable-builtin"
+            ]
+        },
+        {
+            "name": "Disable custom",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-builtin"
+            ]
+        },
+        {
+            "name": "Disable behavioral",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-behavioral"
+            ]
+        },
+        {
+            "name": "Preflight + behavioral",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-builtin",
+                "--disable-custom"
+            ]
+        },
+        {
+            "name": "Preflight + custom",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-behavioral",
+                "--disable-builtin"
+            ]
+        },
+        {
+            "name": "Only preflight",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-behavioral",
+                "--disable-builtin",
+                "--disable-custom"
+            ]
+        },
+        {
+            "name": "Help",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-h"
             ]
         }
     ]
 }
 ```
-
 
 ## Permissions
 
