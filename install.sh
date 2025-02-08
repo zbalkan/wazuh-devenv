@@ -461,14 +461,12 @@ add_user_to_wazuh_group() {
 
         # Check if the user exists on the system
         if id "$username" &>/dev/null; then
-            # Add user to the wazuh group
-            usermod -a -G wazuh "$username"
-
             # Verify if the user was added to the group
             if groups "$username" | grep -q "\bwazuh\b"; then
-                info "User $username has been added to the wazuh group."
+                info "User $username is already in the wazuh group. Skipping..."
             else
-                warn "Warning: User $username has not been added to the wazuh group. Please fix it manually."
+                usermod -a -G wazuh "$username"
+                info "User $username has been added to the wazuh group."
             fi
             break
         else
