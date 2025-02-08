@@ -31,20 +31,25 @@ def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 
     return test_result
 
 
-def main(enable_builtin: bool, verbosity: int) -> None:
+def main(disable_builtin: bool = False, disable_custom: bool = False, disable_behavioral: bool = False, verbosity: int = 1) -> None:
     # Run preflight tests
-    preflight_result = run_tests('tests.preflight', verbosity=verbosity)
+    preflight_result = run_tests('tests.preflight_tests', verbosity=verbosity)
     if preflight_result and (preflight_result.errors or preflight_result.failures):
         print('Preflight tests failed. Exiting.')
         logging.error('Preflight tests failed. Exiting.')
         exit(1)
 
     # Conditionally run built-in rule tests if enabled
-    if enable_builtin:
+    if disable_builtin is not False:
         run_tests('tests.regression_tests.builtin', verbosity=verbosity)
 
     # Run custom rule tests
-    run_tests('tests.regression_tests.custom', verbosity=verbosity)
+    if disable_custom is not False:
+        run_tests('tests.regression_tests.custom', verbosity=verbosity)
+
+    # Run behavioral tests
+    if disable_behavioral is not False:
+        run_tests('tests.behavioral_tests', verbosity=verbosity)
 
 
 def setup_logging() -> None:
@@ -66,9 +71,19 @@ def parse_arguments() -> argparse.Namespace:
 
     # Add flags and parameters
     parser.add_argument(
-        '--enable-builtin',
-        action='store_true',
-        help="Enable running built-in rule tests. Disabled by default."
+        '--disable-builtin',
+        action='store_false',
+        help="Disable running built-in rule tests for regression. Enabled by default."
+    )
+    parser.add_argument(
+        '--disable-custom',
+        action='store_false',
+        help="Disable running custom rule tests for regression. Enabled by default."
+    )
+    parser.add_argument(
+        '--disable-behavioral',
+        action='store_false',
+        help="Disable running behavioral tests. Enabled by default."
     )
     parser.add_argument(
         '--verbosity',
@@ -93,7 +108,7 @@ if __name__ == "__main__":
         args = parse_arguments()
 
         # Run the main function with parsed arguments
-        main(enable_builtin=args.enable_builtin, verbosity=args.verbosity)
+        main(disable_builtin=args.enable_builtin, verbosity=args.verbosity)
 
         logging.info('Exiting.')
     except KeyboardInterrupt:
