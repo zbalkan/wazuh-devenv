@@ -59,6 +59,23 @@ decoders_dir=$(realpath ./decoders)
 rules_dir=$(realpath ./rules)
 ossec_conf="/var/ossec/etc/ossec.conf"
 PKG_MANAGER=""
+SERVICE_MANAGER=""
+
+detect_service_manager() {
+    info "Detecting service manager..."
+
+    if command -v systemctl &>/dev/null && systemctl list-units --type=service &>/dev/null; then
+        info "Detected systemd (systemctl)."
+        SERVICE_MANAGER="systemd"
+    elif command -v service &>/dev/null && service --status-all &>/dev/null; then
+        info "Detected SysVinit (service command)."
+        SERVICE_MANAGER="sysvinit"
+    else
+        error "No supported service manager found (systemctl or service). Exiting..."
+        exit 1
+    fi
+}
+
 
 # Detect package manager
 detect_package_manager() {
@@ -409,9 +426,8 @@ add_user_to_wazuh_group() {
 start_wazuh_service() {
     info "Starting Wazuh Manager service..."
 
-    # Check if systemctl is available
-    if command -v systemctl &>/dev/null && systemctl > /dev/null 2>&1; then
-        # Use systemctl if available
+    if [[ "$SERVICE_MANAGER" == "systemd" ]]; then
+        info "Using systemctl to manage the service."
         systemctl daemon-reload
         systemctl enable wazuh-manager
         systemctl start wazuh-manager
@@ -421,10 +437,9 @@ start_wazuh_service() {
         else
             error "Wazuh installation or startup failed using systemctl. Please check the logs for more details."
         fi
-    else
-        # Fallback to service command if systemctl is not available (e.g., on WSL)
-        info "Systemctl not available, falling back to service command..."
-        service wazuh-manager start;
+    elif [[ "$SERVICE_MANAGER" == "sysvinit" ]]; then
+        info "Using service command to manage the service."
+        service wazuh-manager start
         exit_code=$?
 
         if [[ $exit_code -ne 0 ]]; then
@@ -432,15 +447,19 @@ start_wazuh_service() {
             exit 1
         fi
 
-        # Log that the service start completed successfully based on the exit code
         info "Wazuh Manager has been successfully started."
+    else
+        error "No valid service manager detected. Wazuh Manager cannot be started."
+        exit 1
     fi
 }
+
 
 # main function
 main() {
     info "Starting Wazuh Manager setup..."
     detect_package_manager
+    detect_service_manager
     install_wazuh_manager
     update_configuration
     enable_windows_eventlog_rule_testing
