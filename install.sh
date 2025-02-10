@@ -72,6 +72,23 @@ ossec_conf="/var/ossec/etc/ossec.conf"
 PKG_MANAGER=""
 SERVICE_MANAGER=""
 
+check_dependencies() {
+    info "Checking required dependencies..."
+
+    # Define required commands
+    local dependencies=("awk" "grep" "curl" "git")
+
+    # Loop through each dependency and check if it's available
+    for cmd in "${dependencies[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            error "Missing dependency: $cmd. Please install it before proceeding."
+            exit 1
+        fi
+    done
+
+    info "All required dependencies are installed."
+}
+
 detect_service_manager() {
     info "Detecting service manager..."
 
@@ -540,6 +557,7 @@ validate_configuration(){
 # main function
 main() {
     info "Starting Wazuh Manager setup..."
+    check_dependencies
     detect_package_manager
     detect_service_manager
     install_wazuh_manager
