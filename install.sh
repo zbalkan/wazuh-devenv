@@ -76,7 +76,7 @@ check_dependencies() {
     info "Checking required dependencies..."
 
     # Define required commands
-    local dependencies=("awk" "grep" "curl" "git")
+    local dependencies=("awk" "grep" "wget" "git")
 
     # Loop through each dependency and check if it's available
     for cmd in "${dependencies[@]}"; do
@@ -166,7 +166,7 @@ setup_apt_repo_and_install() {
         info "Wazuh GPG key is already imported."
     else
         info "Adding Wazuh GPG key for APT..."
-        if ! curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH -o /tmp/GPG-KEY-WAZUH; then
+        if ! wget -qO /tmp/GPG-KEY-WAZUH https://packages.wazuh.com/key/GPG-KEY-WAZUH; then
             error "Failed to download Wazuh GPG key. Check network connectivity."
             exit 1
         fi
@@ -215,7 +215,7 @@ setup_yum_repo_and_install() {
         info "Wazuh GPG key is already imported."
     else
         info "Adding Wazuh GPG key for YUM..."
-        if ! curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH -o /tmp/GPG-KEY-WAZUH; then
+        if ! wget -qO /tmp/GPG-KEY-WAZUH https://packages.wazuh.com/key/GPG-KEY-WAZUH; then
             error "Failed to download Wazuh GPG key. Check network connectivity."
             exit 1
         fi
