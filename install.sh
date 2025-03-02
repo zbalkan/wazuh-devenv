@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Check if we are working with WSL
+# If you want to build completely on Linux, you need to modify the script
+if grep -i -q Microsoft /proc/version; then
+    echo "Bash is running on WSL. Proceeding..."
+else
+    echo "Bash is NOT running on WSL. Exiting..."
+    exit 1
+fi
+
 LOGFILE="/var/log/wazuh_setup.log"
 LOCKFILE="/var/lock/wazuh-setup.lock"
 
