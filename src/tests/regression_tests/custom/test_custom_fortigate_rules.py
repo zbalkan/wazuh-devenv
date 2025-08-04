@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
+
 import unittest
 
 from internal.logtest import LogtestStatus, send_log
