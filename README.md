@@ -38,6 +38,13 @@ You are ready to update and test your logs locally. You can combine the script i
 
 The sample rules are taken from the Wazuh blog [Creating decoders and rules from scratch](https://wazuh.com/blog/creating-decoders-and-rules-from-scratch/).
 
+Mind the folder structure and semantics behind:
+* `preflight_tests`: These are tests you should not touch. They check correct file permissions and Wazuh service availability.
+* `regression_tests`: These tests are the ones you must focus on.
+  * builtin: These are generated from the INI-formatted tests from Wazuh repository. I developed a [test generator](https://github.com/zbalkan/wazuh_test_generator) for this, then manually fixed remaining problems, and pasted the test code into this repository. Yo do not need to touch this folder.
+  * custom: This is the place you must write the tests for your custom rules. It is under regression tests as they are testing **whether your rules are working or not after changes**.
+* `behavioral_tests`: This directory is designed for Breach and Attack Simulations or advanced testing scenarios. You can read this old article on [testing Wazuh with Atomic Red Team](https://wazuh.com/blog/emulation-of-attck-techniques-and-detection-with-wazuh/). This is an advanced case and out of scope of this article.
+
 ## Usage
 
 ```shell
@@ -52,6 +59,9 @@ options:
   --disable-behavioral  Disable running behavioral tests. Enabled by default.
   --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
 ```
+
+
+### VS Code configuration
 
 If you are using VS Code, you can use this debug configuration as a starter:
 
