@@ -2,7 +2,9 @@
 
 The project aims to create a development environment for detection engineers using Wazuh. While it is designed to utilize a `wazuh-manager` installed on WSL to allow testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for the future.
 
-## Setup for WSL
+## Installation
+
+### For WSL
 
 1. Ensure a WSL instance running in your environment. The distribution that matches the Production deployment is better.
 2. Limit the WSL memory usage in `~/wsl.config` by adding `memory=16GB` or however you like. Wazuh is allocating as much memory as it can, so it is better to limit WSL as a whole. 
@@ -16,6 +18,19 @@ The project aims to create a development environment for detection engineers usi
 10. Add your organization's git repository for further use `git remote add origin <URL>`.
 11. Initiate your preference of Python virtual environment.
 12. You should be able to read and access rules from the repository. Add the rules and decoders to git.
+
+### For Linux
+
+1. Clone the repo to the preferred location for development. For me, using `~/wazuh-devenv` is easier.
+2. Run the script `sudo ./install.sh` to start installation.
+3. The script will ask you to copy rules and decoders to the new locations. After you copied them, hit `y` and continue. Otherwise it will rollback the changes.
+4. The script will ask you to provide the username you are going to use for development. Ensure you typed it correctly.
+5. The installation and configuration will be completed successfully. If any error occurs, messages would be displayed for the user to fix the issues manually.
+6. Remove the origin from Github to prevent accidentally leaking your rules and decoders to public repositories by running `git remote rm origin`.
+7. Add your organization's git repository for further use `git remote add origin <URL>`.
+8. Initiate your preference of Python virtual environment.
+9. You should be able to read and access rules from the repository. Add the rules and decoders to git.
+10. Proceed with your choice of IDE.
 
 You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
 
@@ -131,6 +146,7 @@ If you are using VS Code, you can use this debug configuration as a starter:
     ]
 }
 ```
+
 ## Logs
 
 You can find the tester logs in `/var/ossec/logs/tester.log`.
@@ -182,9 +198,9 @@ setfacl -d -m o::--- "$rules_dir"
 
 ## Notes
 
-* Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copied the files. It is suggested to use a clear naming convention instead of these files.
+* Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copy the files. It is suggested to use a clear naming convention instead of these files.
 * The builtin rules of Wazuh are included in the repository but it is recommended to disable them during development for faster testing of custom rules. It is suggested to enable testing builtin rules during CI/CD for more coverage.
-* The INI tests are complicated as they can be separate tests or simulating multiple log sending. In our case we used `send_log` and `send_multiple_logs` as different test methods to simulate different behaviors. This is the case for some tests that are testing triggers of multiple alerts.
+* I find the INI tests in the Wazuh repo complicated as they can be separate tests or simulating multiple log sending. In this case I used `send_log` and `send_multiple_logs` as different test methods to simulate different behaviors. This is the case for some tests that are testing triggers of multiple alerts.
 * The tests below are testing the syntax and behavior for decoders and rules, not the detections. They must be tested by the Wazuh devs, not users. So they are ignored.
 
 | Tests | Rules and decoders |
