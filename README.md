@@ -9,7 +9,7 @@ Refer to the [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model]
 ### For WSL
 
 1. Ensure a WSL instance running in your environment. The distribution that matches the Production deployment is better.
-2. Limit the WSL memory usage in `~/wsl.config` by adding `memory=16GB` or however you like. Wazuh is allocating as much memory as it can, so it is better to limit WSL as a whole. 
+2. Limit the WSL memory usage in `~/wsl.config` by adding `memory=16GB` or however you like. Wazuh is allocating as much memory as it can, so it is better to limit WSL as a whole.
 3. Clone the repo to the preferred location for development. For me, using `~/wazuh-devenv` is easier.
 4. Run the script `sudo ./install.sh` to start installation.
 5. The script will ask you to copy rules and decoders to the new locations. After you copied them, hit `y` and continue. Otherwise it will rollback the changes.
@@ -41,11 +41,12 @@ You are ready to update and test your logs locally. You can combine the script i
 The sample rules are taken from the Wazuh blog [Creating decoders and rules from scratch](https://wazuh.com/blog/creating-decoders-and-rules-from-scratch/).
 
 Mind the folder structure and semantics behind:
-* `preflight_tests`: These are tests you should not touch. They check correct file permissions and Wazuh service availability.
-* `regression_tests`: These tests are the ones you must focus on.
-  * builtin: These are generated from the INI-formatted tests from Wazuh repository. I developed a [test generator](https://github.com/zbalkan/wazuh_test_generator) for this, then manually fixed remaining problems, and pasted the test code into this repository. Yo do not need to touch this folder.
-  * custom: This is the place you must write the tests for your custom rules. It is under regression tests as they are testing **whether your rules are working or not after changes**.
-* `behavioral_tests`: This directory is designed for Breach and Attack Simulations or advanced testing scenarios. You can read this old article on [testing Wazuh with Atomic Red Team](https://wazuh.com/blog/emulation-of-attck-techniques-and-detection-with-wazuh/). This is an advanced case and out of scope of this article.
+
+- `preflight_tests`: These are tests you should not touch. They check correct file permissions and Wazuh service availability.
+- `regression_tests`: These tests are the ones you must focus on.
+  - builtin: These are generated from the INI-formatted tests from Wazuh repository. I developed a [test generator](https://github.com/zbalkan/wazuh_test_generator) for this, then manually fixed remaining problems, and pasted the test code into this repository. Yo do not need to touch this folder.
+  - custom: This is the place you must write the tests for your custom rules. It is under regression tests as they are testing **whether your rules are working or not after changes**.
+- `behavioral_tests`: This directory is designed for Breach and Attack Simulations or advanced testing scenarios. You can read this old article on [testing Wazuh with Atomic Red Team](https://wazuh.com/blog/emulation-of-attck-techniques-and-detection-with-wazuh/). This is an advanced case and out of scope of this article.
 
 ## Usage
 
@@ -61,7 +62,6 @@ options:
   --disable-behavioral  Disable running behavioral tests. Enabled by default.
   --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
 ```
-
 
 ### VS Code configuration
 
@@ -210,10 +210,10 @@ setfacl -d -m o::--- "$rules_dir"
 
 ## Notes
 
-* Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copy the files. It is suggested to use a clear naming convention instead of these files.
-* The builtin rules of Wazuh are included in the repository but it is recommended to disable them during development for faster testing of custom rules. It is suggested to enable testing builtin rules during CI/CD for more coverage.
-* I find the INI tests in the Wazuh repo complicated as they can be separate tests or simulating multiple log sending. In this case I used `send_log` and `send_multiple_logs` as different test methods to simulate different behaviors. This is the case for some tests that are testing triggers of multiple alerts.
-* The tests below are testing the syntax and behavior for decoders and rules, not the detections. They must be tested by the Wazuh devs, not users. So they are ignored.
+- Be aware that the *local_decoder.xml* and *local_rules.xml* are ignored by git as they will be the first files to be added when you copy the files. It is suggested to use a clear naming convention instead of these files.
+- The builtin rules of Wazuh are included in the repository but it is recommended to disable them during development for faster testing of custom rules. It is suggested to enable testing builtin rules during CI/CD for more coverage.
+- I find the INI tests in the Wazuh repo complicated as they can be separate tests or simulating multiple log sending. In this case I used `send_log` and `send_multiple_logs` as different test methods to simulate different behaviors. This is the case for some tests that are testing triggers of multiple alerts.
+- The tests below are testing the syntax and behavior for decoders and rules, not the detections. They must be tested by the Wazuh devs, not users. So they are ignored.
 
 | Tests | Rules and decoders |
 |-------|--------------------|
