@@ -50,6 +50,8 @@ Mind the folder structure and semantics behind:
 
 ## Usage
 
+### Testing
+
 ```shell
 usage: tester.py [-h] [--disable-builtin] [--disable-custom] [--disable-behavioral] [--verbosity {0,1,2}]
 
@@ -61,6 +63,19 @@ options:
   --disable-custom      Disable running custom rule tests for regression. Enabled by default.
   --disable-behavioral  Disable running behavioral tests. Enabled by default.
   --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
+```
+
+### Test coverage
+
+```shell
+usage: coverage.py.
+```
+
+The script does not accept any arguments. It scans the `rules` directory, collects the defined rule IDs, then compare against the tests. Coverage script expectes a line that has a variable of type `LogtestResponse`, and looking for a comparison of `rule_id` attribute with a non-empty string. The name of the variable does not matter.
+
+```python
+        response = send_log(log)
+        self.assertEqual(response.rule_id, '410')
 ```
 
 ### VS Code configuration
