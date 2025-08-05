@@ -3,13 +3,15 @@
 import ast
 import os
 import xml.etree.ElementTree as ET
+from typing import Final
 
-ENCODING = "utf-8"
-RULES_DIR = "./rules"
-TESTS_ROOT = "./src/tests"
+ENCODING: Final[str] = "utf-8"
+BUILTIN_RULES_DIR: Final[str] = "/var/ossec/ruleset/rules"
+CUSTOM_RULES_DIR: Final[str] = "./rules"
+TESTS_ROOT: Final[str] = "./src/tests"
 
 
-def collect_rule_ids_from_rules(rules_dir: str) -> set[str]:
+def collect_rule_ids_from_rules(rules_dir: str) -> set[int]:
     rule_ids = set()
     for root, _, files in os.walk(rules_dir):
         for file in files:
@@ -24,14 +26,15 @@ def collect_rule_ids_from_rules(rules_dir: str) -> set[str]:
                 for rule in tree.iter("rule"):
                     rule_id = rule.attrib.get("id")
                     if rule_id:
-                        rule_ids.add(rule_id)
+                        rule_ids.add(int(rule_id))
             except Exception as e:
                 print(f"[WARN] Could not parse rule file {path}: {e}")
     return rule_ids
 
 
-def collect_referenced_rule_ids_from_tests(test_root: str) -> set[str]:
+def collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], int]:
     referenced_ids = set()
+    test_func_count = 0
 
     for root, _, files in os.walk(test_root):
         for file in files:
@@ -44,6 +47,8 @@ def collect_referenced_rule_ids_from_tests(test_root: str) -> set[str]:
                     tree = ast.parse(f.read(), filename=path)
 
                 for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                        test_func_count += 1
                     if (
                         isinstance(node, ast.Call)
                         and isinstance(node.func, ast.Attribute)
@@ -71,20 +76,21 @@ def collect_referenced_rule_ids_from_tests(test_root: str) -> set[str]:
                             val = None
 
                         if val:
-                            referenced_ids.add(val)
+                            referenced_ids.add(int(val))
 
             except Exception as e:
                 print(f"[WARN] Could not parse test file {path}: {e}")
 
-    return referenced_ids
+    return referenced_ids, test_func_count
 
 
-def report_coverage(defined_ids: set[str], tested_ids: set[str]) -> None:
+def report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count: int) -> None:
     uncovered = defined_ids - tested_ids
     coverage_percent = ((len(defined_ids) - len(uncovered)) / len(defined_ids)) * 100 if defined_ids else 0
 
     print("\n=== Wazuh Rule Coverage Report ===")
     print(f"Total rules defined: {len(defined_ids)}")
+    print(f"Total test functions: {test_func_count}")
     print(f"Rules referenced in tests: {len(tested_ids)}")
     print(f"Coverage: {coverage_percent:.2f}%")
 
@@ -95,11 +101,16 @@ def report_coverage(defined_ids: set[str], tested_ids: set[str]) -> None:
 
 
 if __name__ == "__main__":
-    print("[*] Scanning rules directory...")
-    all_rule_ids = collect_rule_ids_from_rules(RULES_DIR)
+    print("[*] Scanning built-in rules directory...")
+    builtin_rules = collect_rule_ids_from_rules(BUILTIN_RULES_DIR)
+
+    print("[*] Scanning custom rules directory...")
+    custom_rules = collect_rule_ids_from_rules(CUSTOM_RULES_DIR)
+    all_rule_ids = builtin_rules.union(custom_rules)
 
     print("[*] Scanning test files...")
-    referenced_ids = collect_referenced_rule_ids_from_tests(TESTS_ROOT)
+    referenced_ids, test_func_count = collect_referenced_rule_ids_from_tests(
+        TESTS_ROOT)
 
     print("[*] Generating report...")
-    report_coverage(all_rule_ids, referenced_ids)
+    report_coverage(all_rule_ids, referenced_ids, test_func_count)
