@@ -78,6 +78,25 @@ The script does not accept any arguments. It scans the `rules` directory, collec
         self.assertEqual(response.rule_id, '410')
 ```
 
+In the end, you will see a simple report like this:
+
+```text
+[*] Scanning custom rules directory...
+  [*] Found 2 rules...
+[*] Scanning test files...
+  [*] Found 1 rule IDs in tests...
+[*] Generating report...
+
+=== Wazuh Rule Coverage Report ===
+Total rules defined: 2
+Total test functions: 1
+Rules referenced in tests: 1
+Coverage: 50.00%
+
+Uncovered Rule IDs:
+  - 222016
+```
+
 ### VS Code configuration
 
 If you are using VS Code, you can use this debug configuration as a starter:
