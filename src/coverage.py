@@ -8,7 +8,7 @@ from typing import Final
 ENCODING: Final[str] = "utf-8"
 BUILTIN_RULES_DIR: Final[str] = "/var/ossec/ruleset/rules"
 CUSTOM_RULES_DIR: Final[str] = "./rules"
-TESTS_ROOT: Final[str] = "./src/tests"
+TESTS_ROOT: Final[str] = "./src/tests/regression_tests/custom"
 
 
 def collect_rule_ids_from_rules(rules_dir: str) -> set[int]:
@@ -102,23 +102,26 @@ def report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count
 
 if __name__ == "__main__":
 
-    if (not os.path.exists(BUILTIN_RULES_DIR)):
-        raise FileNotFoundError(BUILTIN_RULES_DIR)
+    # The BUILTIN_RULES_DIR is here for long term maintenance purposes.
+    # User is not responsible for those tests.
+
+    # if (not os.path.exists(BUILTIN_RULES_DIR)):
+    #     raise FileNotFoundError(BUILTIN_RULES_DIR)
     if (not os.path.exists(CUSTOM_RULES_DIR)):
         raise FileNotFoundError(CUSTOM_RULES_DIR)
     if (not os.path.exists(TESTS_ROOT)):
         raise FileNotFoundError(TESTS_ROOT)
 
-    print("[*] Scanning built-in rules directory...")
-    builtin_rules = collect_rule_ids_from_rules(BUILTIN_RULES_DIR)
-    print(f"  [*] Found {len(builtin_rules)} rules...")
+    # print("[*] Scanning built-in rules directory...")
+    # builtin_rules = collect_rule_ids_from_rules(BUILTIN_RULES_DIR)
+    # print(f"  [*] Found {len(builtin_rules)} rules...")
 
     print("[*] Scanning custom rules directory...")
     custom_rules = collect_rule_ids_from_rules(CUSTOM_RULES_DIR)
     print(f"  [*] Found {len(custom_rules)} rules...")
 
-    all_rule_ids = builtin_rules.union(custom_rules)
-
+    # all_rule_ids = builtin_rules.union(custom_rules)
+    all_rule_ids = custom_rules
     print("[*] Scanning test files...")
     referenced_ids, test_func_count = collect_referenced_rule_ids_from_tests(
         TESTS_ROOT)
