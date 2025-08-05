@@ -190,6 +190,8 @@ class WazuhLogtest:
             return False
 
     def __remove_newlines(self, log: str) -> str:
+        if (log == ""):
+            return log
         if (log[0] == '\n'):
             log = log[1:]
         if (log[-1] == '\n'):
@@ -198,6 +200,23 @@ class WazuhLogtest:
 
 
 class LogtestStatus(Enum):
+    """
+    Represents the result status of a log processed by the Wazuh logtest daemon.
+
+    This enumeration encodes the semantic outcome of log analysis, based on whether a decoder
+    was applied, a rule matched, or an error occurred during processing. It enables structured
+    branching logic and test assertions based on the analysis result.
+
+    Members:
+        RuleMatch: A rule matched the log; indicates successful decoding and rule application.
+        Error: An error occurred during processing, such as malformed input or internal failure.
+        NoDecoder: No decoder matched the log format; the log could not be interpreted.
+        NoRule: A decoder matched, but no rule was triggered.
+
+    Usage:
+        Used by LogtestResponse to classify processing outcomes in a reliable, testable way.
+    """
+
     RuleMatch = auto()
     Error = auto()
     NoDecoder = auto()
@@ -205,44 +224,82 @@ class LogtestStatus(Enum):
 
 
 class LogtestResponse:
-    """Represents the response from Wazuh logtest."""
+    """
+    Represents the structured response returned by Wazuh's logtest daemon after processing a log message.
+
+    This class parses and stores key elements from the daemon response, including alert status, rule matching,
+    decoder used, parsed fields, and any associated error. It also determines the processing status based on the
+    presence of decoder, rule, and error codes.
+
+    Attributes:
+        status (LogtestStatus): The status indicating whether a rule matched, decoder was found, or an error occurred.
+        messages (Any): List or object containing informational or warning messages from Wazuh.
+        token (str): The session token used for multi-log sessions.
+        alert (bool): Indicates whether an alert was triggered.
+        full_log (str): The original log as reconstructed or normalized by Wazuh.
+        timestamp (str): The timestamp associated with the log.
+        location (str): The location field indicating the origin of the log.
+        decoder (Optional[str]): The name of the decoder applied to the log, if any.
+        error (Any): The error code returned by the daemon (0 for success).
+        rule_id (Optional[str]): The ID of the rule matched, if any.
+        rule_level (Optional[int]): The severity level of the matched rule.
+        rule_description (Optional[str]): A description of the matched rule.
+        rule_groups (list[str]): The list of rule groups associated with the matched rule.
+
+    Methods:
+        get_data_field(field_path: list[str]) -> Optional[Any]:
+            Retrieves nested parsed data using a path of dictionary keys.
+
+    Usage:
+        This class is typically instantiated internally by the logtest interface functions
+        and used in testing or monitoring pipelines to verify rule coverage and alerting logic.
+    """
+
+    status: LogtestStatus
+    messages: Any
+    token: str
+    alert: bool
+    full_log: str
+    timestamp: str
+    location: str
+    decoder: Optional[str]
+    error: Any
+    rule_id: Optional[str]
 
     def __init__(self, response_dict: dict) -> None:
-        self.raw_response = response_dict
 
         # Extract error and data from the response
         self.error = response_dict.get('error', 0)
-        self.data = response_dict.get('data', {})
+        __data = response_dict.get('data', {})
 
-        self.messages = self.data.get('messages', [])
-        self.token = self.data.get('token', '')
-        self.alert = self.data.get('alert', False)
+        self.messages = __data.get('messages', [])
+        self.token = __data.get('token', '')
+        self.alert = __data.get('alert', False)
 
-        self.output = self.data.get('output', {})
-        self.full_log = self.output.get('full_log', '')
-        self.timestamp = self.output.get('timestamp', '')
-        self.location = self.output.get('location', '')
+        __output = __data.get('output', {})
+        self.full_log = __output.get('full_log', '')
+        self.timestamp = __output.get('timestamp', '')
+        self.location = __output.get('location', '')
 
         # Decoder information
-        decoder_info = self.output.get('decoder', {})
-        self.decoder = decoder_info.get('name', None)
+        __decoder_info = __output.get('decoder', {})
+        self.decoder = __decoder_info.get('name', None)
 
         # Rule information
-        rule_info = self.output.get('rule', {})
-        self.rule = rule_info if rule_info else None
-        self.rule_id = rule_info.get('id', None)
-        self.rule_level = rule_info.get('level', None)
-        self.rule_description = rule_info.get('description', None)
-        self.rule_groups = rule_info.get(
-            'groups', []) if 'groups' in rule_info else []
+        __rule_info = __output.get('rule', {})
+        self.rule_id = __rule_info.get('id', None)
+        self.rule_level = __rule_info.get('level', None)
+        self.rule_description = __rule_info.get('description', None)
+        self.rule_groups = __rule_info.get(
+            'groups', []) if 'groups' in __rule_info else []
 
         # Parsed data
-        self.parsed_data = self.output.get('data', {})
+        self.__parsed_data = __output.get('data', {})
 
         # Determine the status
-        self.status = self._determine_status()
+        self.status = self.__determine_status()
 
-    def _determine_status(self) -> LogtestStatus:
+    def __determine_status(self) -> LogtestStatus:
         """Determine the status of the response."""
         if self.error != 0:
             return LogtestStatus.Error
@@ -254,7 +311,7 @@ class LogtestResponse:
 
     def get_data_field(self, field_path: list[str]) -> Optional[Any]:
         """Retrieve nested data fields using a list of keys."""
-        data = self.parsed_data
+        data = self.__parsed_data
         for key in field_path:
             if isinstance(data, dict):
                 data = data.get(key)
