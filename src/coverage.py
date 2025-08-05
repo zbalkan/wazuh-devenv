@@ -42,7 +42,6 @@ def collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], in
                 continue
 
             path = os.path.join(root, file)
-            print(f"Checking file: {path}")
             try:
                 with open(path, "r", encoding=ENCODING) as f:
                     tree = ast.parse(f.read(), filename=path)
