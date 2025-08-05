@@ -42,6 +42,7 @@ def collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], in
                 continue
 
             path = os.path.join(root, file)
+            print(f"Checking file: {path}")
             try:
                 with open(path, "r", encoding=ENCODING) as f:
                     tree = ast.parse(f.read(), filename=path)
@@ -101,16 +102,28 @@ def report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count
 
 
 if __name__ == "__main__":
+
+    if (not os.path.exists(BUILTIN_RULES_DIR)):
+        raise FileNotFoundError(BUILTIN_RULES_DIR)
+    if (not os.path.exists(CUSTOM_RULES_DIR)):
+        raise FileNotFoundError(CUSTOM_RULES_DIR)
+    if (not os.path.exists(TESTS_ROOT)):
+        raise FileNotFoundError(TESTS_ROOT)
+
     print("[*] Scanning built-in rules directory...")
     builtin_rules = collect_rule_ids_from_rules(BUILTIN_RULES_DIR)
+    print(f"  [*] Found {len(builtin_rules)} rules...")
 
     print("[*] Scanning custom rules directory...")
     custom_rules = collect_rule_ids_from_rules(CUSTOM_RULES_DIR)
+    print(f"  [*] Found {len(custom_rules)} rules...")
+
     all_rule_ids = builtin_rules.union(custom_rules)
 
     print("[*] Scanning test files...")
     referenced_ids, test_func_count = collect_referenced_rule_ids_from_tests(
         TESTS_ROOT)
+    print(f"  [*] Found {len(referenced_ids)} rule IDs in tests...")
 
     print("[*] Generating report...")
     report_coverage(all_rule_ids, referenced_ids, test_func_count)
