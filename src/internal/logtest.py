@@ -312,9 +312,10 @@ class LogtestResponse:
         if (__groups):
             self.rule_groups = set(__groups)
 
-        mitre: dict = __rule_info.get('mitre', None)
-        if (mitre):
-            self.rule_mitre_ids = set(mitre.values())
+        __mitre = __rule_info.get('mitre')
+        if (__mitre):
+            __ids = __mitre.get('id', [])
+            self.rule_mitre_ids = set(__ids) if not isinstance(__ids, str) else {__ids}
 
         # Messages for debugging
         self.__messages = __data.get('messages', [])
