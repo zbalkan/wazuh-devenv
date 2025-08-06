@@ -233,18 +233,16 @@ class LogtestResponse:
 
     Attributes:
         status (LogtestStatus): The status indicating whether a rule matched, decoder was found, or an error occurred.
-        messages (Any): List or object containing informational or warning messages from Wazuh.
-        token (str): The session token used for multi-log sessions.
         alert (bool): Indicates whether an alert was triggered.
         full_log (str): The original log as reconstructed or normalized by Wazuh.
         timestamp (str): The timestamp associated with the log.
         location (str): The location field indicating the origin of the log.
         decoder (Optional[str]): The name of the decoder applied to the log, if any.
-        error (Any): The error code returned by the daemon (0 for success).
         rule_id (Optional[str]): The ID of the rule matched, if any.
         rule_level (Optional[int]): The severity level of the matched rule.
         rule_description (Optional[str]): A description of the matched rule.
         rule_groups (list[str]): The list of rule groups associated with the matched rule.
+        rule_mitre_ids (list[str]): The list of MITRE ATT&CK TTP IDs associated with the matched rule.
 
     Methods:
         get_data_field(field_path: list[str]) -> Optional[Any]:
@@ -256,62 +254,74 @@ class LogtestResponse:
     """
 
     status: LogtestStatus
-    messages: Any
-    token: str
     alert: bool
     full_log: str
     timestamp: str
     location: str
-    decoder: Optional[str]
-    error: Any
-    rule_id: Optional[str]
+    decoder: Optional[str] = None
+    rule_id: Optional[str] = None
+    rule_level: Optional[str] = None
+    rule_description: Optional[str] = None
+    rule_groups: Optional[set[str]] = None
+    rule_mitre_ids: Optional[set[str]] = None
 
     def __init__(self, response_dict: dict) -> None:
 
-        # Extract error and data from the response
-        self.error = response_dict.get('error', 0)
-        __data = response_dict.get('data', {})
+        # Extract error, return early if there's an error
+        if (response_dict.get('error', 0) != 0):
+            self.status = LogtestStatus.Error
+            return
 
-        self.messages = __data.get('messages', [])
-        self.token = __data.get('token', '')
+        # Get the data field for more info
+        __data: dict[str, Any] = response_dict.get('data', {})
         self.alert = __data.get('alert', False)
 
-        __output = __data.get('output', {})
+        __output: dict = __data.get('output', {})
         self.full_log = __output.get('full_log', '')
         self.timestamp = __output.get('timestamp', '')
         self.location = __output.get('location', '')
 
+        # Other data fields
+        self.__data_fields = __output.get('data', {})
+
         # Decoder information
-        __decoder_info = __output.get('decoder', {})
+        __decoder_info: Optional[dict] = __output.get('decoder', None)
+
+        # No decoder, set status and return early
+        if (__decoder_info is None):
+            self.status = LogtestStatus.NoDecoder
+            return
+
         self.decoder = __decoder_info.get('name', None)
 
         # Rule information
-        __rule_info = __output.get('rule', {})
+        __rule_info: Optional[dict] = __output.get('rule', None)
+
+        # No rule, set status and return early
+        if (__rule_info is None):
+            self.status = LogtestStatus.NoRule
+            return
+
+        self.status = LogtestStatus.RuleMatch
+
         self.rule_id = __rule_info.get('id', None)
         self.rule_level = __rule_info.get('level', None)
         self.rule_description = __rule_info.get('description', None)
-        self.rule_groups = __rule_info.get(
-            'groups', []) if 'groups' in __rule_info else []
 
-        # Parsed data
-        self.__parsed_data = __output.get('data', {})
+        __groups = __rule_info.get('groups', None)
+        if (__groups):
+            self.rule_groups = set(__groups)
 
-        # Determine the status
-        self.status = self.__determine_status()
+        mitre: dict = __rule_info.get('mitre', None)
+        if (mitre):
+            self.rule_mitre_ids = set(mitre.values())
 
-    def __determine_status(self) -> LogtestStatus:
-        """Determine the status of the response."""
-        if self.error != 0:
-            return LogtestStatus.Error
-        if not self.decoder:
-            return LogtestStatus.NoDecoder
-        if not self.rule_id:
-            return LogtestStatus.NoRule
-        return LogtestStatus.RuleMatch
+        # Messages for debugging
+        self.__messages = __data.get('messages', [])
 
     def get_data_field(self, field_path: list[str]) -> Optional[Any]:
         """Retrieve nested data fields using a list of keys."""
-        data = self.__parsed_data
+        data = self.__data_fields
         for key in field_path:
             if isinstance(data, dict):
                 data = data.get(key)
