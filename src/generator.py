@@ -59,7 +59,7 @@ def generate_unit_test_code(rules: list[dict]) -> str:
         groups = rule["groups"]
 
         lines.append(f"    def test_rule_{rule_id}(self):")
-        lines.append(f"        log = '{PLACEHOLDER_LOG}'")
+        lines.append(f"        log = r'''{PLACEHOLDER_LOG}'''")
         lines.append("        response = send_log(log)")
         lines.append("")
         lines.append(
