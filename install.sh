@@ -332,12 +332,58 @@ enable_windows_eventlog_rule_testing(){
     # Wazuh checks event logs by the source
     # But to test it, we must ensure it accepts json logs
     info "Enabling JSON logs for Windows event log rules..."
-sed -i '/<rule id="60000"/,/<\/rule>/ {
-    s|^\(\s*\)<category>|\1<!-- category|; s|</category>$|</category -->|
-    s|^\(\s*\)<decoded_as>|\1<!-- decoded_as|; s|</decoded_as>$|</decoded_as -->|
-    /<!-- decoded_as>/a\
+    local FILE='/var/ossec/ruleset/rules/0575-win-base_rules.xml'
+    local BLOCK DEFAULT EXPECTED
+
+    # Store the default block
+    DEFAULT=$(cat <<'EOF'
+  <rule id="60000" level="0">
+    <category>ossec</category>
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.providerName">\.+</field>
+    <options>no_full_log</options>
+    <description>Group of windows rules</description>
+  </rule>
+EOF
+)
+
+    # Store the expected block
+    EXPECTED=$(cat <<'EOF'
+  <rule id="60000" level="0">
+    <!-- <category>ossec</category> -->
+    <!-- <decoded_as>windows_eventchannel</decoded_as> -->
+    <field name="win.system.providerName">\.+</field>
+    <options>no_full_log</options>
+    <description>Group of windows rules</description>
     <decoded_as>json</decoded_as>
-}' /var/ossec/ruleset/rules/0575-win-base_rules.xml
+  </rule>
+EOF
+)
+
+    # Extract current rule block
+    BLOCK=$(sed -n '/<rule id="60000"/,/<\/rule>/p' "$FILE")
+
+    # 1. If in default state, migrate to expected
+    if [[ "$BLOCK" == "$DEFAULT" ]]; then
+        sed -i '/<rule id="60000"/,/<\/rule>/ {
+            s|^\(\s*\)<category>ossec</category>|\1<!-- <category>ossec</category> -->|
+            s|^\(\s*\)<decoded_as>windows_eventchannel</decoded_as>|\1<!-- <decoded_as>windows_eventchannel</decoded_as> -->|
+            /<\/rule>/i\
+    <decoded_as>json</decoded_as>
+        }' "$FILE"
+        info "Updated rule 60000 successfully."
+        return 0
+    fi
+
+    # 2. If already in expected state, do nothing
+    if [[ "$BLOCK" == "$EXPECTED" ]]; then
+        info "Rule 60000 already in expected state."
+        return 0
+    fi
+
+    # 3. Otherwise, unexpected state → error
+    error "Error: <rule id=\"60000\"> block is in an unexpected state; aborting." >&2
+    return 1
 }
 
 optimize_for_rule_test(){
