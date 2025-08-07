@@ -12,7 +12,7 @@ LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
 class WazuhDaemonProtocol:
     """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
 
-    def __init__(self, version: int = 1, origin_module: str = "wazuh-logtest", module_name: str = "wazuh-logtest"):
+    def __init__(self, version: int = 1, origin_module: str = "wazuh-logtest", module_name: str = "wazuh-logtest") -> None:
         self.protocol: dict[str, Any] = {
             'version': version,
             'origin': {
@@ -267,13 +267,17 @@ class LogtestResponse:
 
     def __init__(self, response_dict: dict) -> None:
 
+        # Get the data field for more info
+        __data: dict[str, Any] = response_dict.get('data', {})
+
+        # Messages for debugging, it's better to get before the error
+        self.__messages = __data.get('messages', [])
+
         # Extract error, return early if there's an error
         if (response_dict.get('error', 0) != 0):
             self.status = LogtestStatus.Error
             return
 
-        # Get the data field for more info
-        __data: dict[str, Any] = response_dict.get('data', {})
         self.alert = __data.get('alert', False)
 
         __output: dict = __data.get('output', {})
@@ -316,9 +320,6 @@ class LogtestResponse:
         if (__mitre):
             __ids = __mitre.get('id', [])
             self.rule_mitre_ids = set(__ids) if not isinstance(__ids, str) else {__ids}
-
-        # Messages for debugging
-        self.__messages = __data.get('messages', [])
 
     def get_data_field(self, field_path: list[str]) -> Optional[Any]:
         """Retrieve nested data fields using a list of keys."""
