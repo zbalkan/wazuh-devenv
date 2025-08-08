@@ -99,30 +99,7 @@ Uncovered Rule IDs:
 
 ### Test generator
 
-The repo has a helper script that allows you to provide a path to the rule file, and it will return you a draft unit test file content. The content is a template you need to update to make it usable. But it would improve your workflow as long as you have logs.
-
-You need to find proper logs for testing. Wihout test data, testing is useless.
-
-If you use the sample rule in `rules` folder to give it a try, you must run `python .\src\generator.py .\rules\fortigate_rules.xml`.
-
-```python
-import unittest
-from internal.logtest import LogtestStatus, send_log
-
-# TODO: Rename the class
-class TestGeneratedRules(unittest.TestCase):
-
-    def test_rule_222000(self):
-        log = 'TODO: provide a matching log here'
-        response = send_log(log)
-
-        self.assertEqual(response.status, LogtestStatus.RuleMatch)
-        self.assertEqual(response.rule_id, '222000')
-        self.assertEqual(response.rule_level, 3)
-        self.assertEqual(response.rule_description, "Fortigate messages grouped.")
-```
-
-You will get the conditions set for you. Rename the class, add the correct log. And your test is good to go.
+Test generator is moved to the original [wazuh-testgen](https://github.com/zbalkan/wazuh-testgen) project. You can clone that repository and use many ways to generate tests or test templates.
 
 ## VS Code configuration
 
