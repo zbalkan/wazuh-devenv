@@ -7,7 +7,7 @@ import stat
 import unittest
 
 
-def get_file_permissions(file_path):
+def get_file_permissions(file_path: str) -> tuple[int, str, str]:
     """Retrieve file permissions, owner, and group of a file."""
     # Check if the file exists
     if not os.path.exists(file_path):
@@ -37,13 +37,13 @@ class TestFilePermissions(unittest.TestCase):
 
     def test_rules_folder_exists(self) -> None:
         # Test if the file exists
-        self.assertTrue(os.path.exists(self.rules_path),
-                        f"File not found: {self.rules_path}")
+        self.assertTrue(expr=os.path.exists(self.rules_path),
+                        msg=f"File not found: {self.rules_path}")
 
     def test_decoders_folder_exists(self) -> None:
         # Test if the file exists
-        self.assertTrue(os.path.exists(self.decoders_path),
-                        f"File not found: {self.decoders_path}")
+        self.assertTrue(expr=os.path.exists(self.decoders_path),
+                        msg=f"File not found: {self.decoders_path}")
 
     def test_rule_permissions(self) -> None:
 
@@ -55,16 +55,16 @@ class TestFilePermissions(unittest.TestCase):
                 permissions, owner, group = get_file_permissions(path)
 
                 # Assert that the permissions are correct
-                self.assertEqual(permissions, self.expected_permissions,
-                                 f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
+                self.assertEqual(first=permissions, second=self.expected_permissions,
+                                 msg=f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
 
                 # Assert that the owner is correct
-                self.assertEqual(owner, self.expected_owner,
-                                 f"Owner for {path} is {owner}, expected {self.expected_owner}")
+                self.assertEqual(first=owner, second=self.expected_owner,
+                                 msg=f"Owner for {path} is {owner}, expected {self.expected_owner}")
 
                 # Assert that the group is correct
-                self.assertEqual(group, self.expected_group,
-                                 f"Group for {path} is {group}, expected {self.expected_group}")
+                self.assertEqual(first=group, second=self.expected_group,
+                                 msg=f"Group for {path} is {group}, expected {self.expected_group}")
 
     def test_decoder_permissions(self) -> None:
 
@@ -76,13 +76,13 @@ class TestFilePermissions(unittest.TestCase):
                 permissions, owner, group = get_file_permissions(path)
 
                 # Assert that the permissions are correct
-                self.assertEqual(permissions, self.expected_permissions,
-                                 f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
+                self.assertEqual(first=permissions, second=self.expected_permissions,
+                                 msg=f"Permissions for {path} are {oct(permissions)}, expected {oct(self.expected_permissions)}")
 
                 # Assert that the owner is correct
-                self.assertEqual(owner, self.expected_owner,
-                                 f"Owner for {path} is {owner}, expected {self.expected_owner}")
+                self.assertEqual(first=owner, second=self.expected_owner,
+                                 msg=f"Owner for {path} is {owner}, expected {self.expected_owner}")
 
                 # Assert that the group is correct
-                self.assertEqual(group, self.expected_group,
-                                 f"Group for {path} is {group}, expected {self.expected_group}")
+                self.assertEqual(first=group, second=self.expected_group,
+                                 msg=f"Group for {path} is {group}, expected {self.expected_group}")
