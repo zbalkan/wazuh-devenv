@@ -382,10 +382,11 @@ def send_multiple_logs(logs: list[str], location: str = "stdin", log_format: str
                 token = response_dict.get('data', {}).get('token')
             response = LogtestResponse(response_dict)
             responses.append(response)
-        # After all logs are sent, remove the session
-        if token:
-            w_logtest.remove_session(token)
         return responses
     except Exception as e:
         logging.error('Error processing logs: %s', e)
         raise
+    finally:
+        # After all logs are sent, remove the session, whether it succeeds or not.
+        if token:
+            w_logtest.remove_session(token)
