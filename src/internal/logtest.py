@@ -8,6 +8,11 @@ from typing import Any, Final, Optional
 # The socket path is a constant since it's determined by Wazuh
 LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
 
+# This constant represents the maximum size for a single event in Wazuh.
+# It is derived from the OS_MAXSTR definition (OS_SIZE_65536) in the Wazuh source code,
+# which defines the size of the buffers used to receive log data from sockets.
+WAZUH_MAX_EVENT_SIZE: Final[int] = 65536
+
 
 class WazuhDaemonProtocol:
     """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
@@ -142,6 +147,9 @@ class WazuhLogtest:
         Returns:
             dict: The response from the Wazuh daemon.
         """
+
+        if len(log.encode('utf-8')) > WAZUH_MAX_EVENT_SIZE:
+            raise ValueError(f"Log size exceeds the maximum limit of {WAZUH_MAX_EVENT_SIZE} bytes.")
 
         data: dict[str, Any] = self.fixed_fields.copy()
         if token:
