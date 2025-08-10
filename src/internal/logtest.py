@@ -14,19 +14,69 @@ LOGTEST_SOCKET: Final[str] = '/var/ossec/queue/sockets/logtest'
 WAZUH_MAX_EVENT_SIZE: Final[int] = 65536
 
 
-class WazuhDaemonProtocol:
-    """Handles the wrapping and unwrapping of messages for communication with Wazuh daemons."""
+class _WazuhLogtestHelpers:
 
-    def __init__(self, version: int = 1, origin_module: str = "wazuh-logtest", module_name: str = "wazuh-logtest") -> None:
-        self.protocol: dict[str, Any] = {
-            'version': version,
-            'origin': {
-                'name': origin_module,
-                'module': module_name
-            }
-        }
+    @staticmethod
+    def is_socket_open() -> bool:
+        """Check if the socket is open.
 
-    def wrap(self, command: str, parameters: dict) -> str:
+        Returns:
+            bool: True if the logtest socket is open, False otherwise.
+        """
+
+        # Create a TCP/IP socket
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(5)  # Set a timeout for the connection attempt
+
+        try:
+            # Try to connect to the host and port
+            s.connect(LOGTEST_SOCKET)
+            return True  # Socket is open
+        except (socket.timeout, socket.error):
+            return False  # Socket is closed or connection failed
+        finally:
+            s.close()  # Close the socket
+
+    @staticmethod
+    def send(msg: str) -> bytes:
+        """Send and receive data to Wazuh socket with message size framing.
+
+        Args:
+            msg (str): The message to send.
+
+        Returns:
+            bytes: The received response.
+
+        Raises:
+            ConnectionError: If communication fails.
+        """
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wlogtest_conn:
+                wlogtest_conn.connect(LOGTEST_SOCKET)
+                encoded_msg = msg.encode('utf-8')
+                wlogtest_conn.sendall(struct.pack(
+                    "<I", len(encoded_msg)) + encoded_msg)
+                # Read the size header
+                size_data = wlogtest_conn.recv(4, socket.MSG_WAITALL)
+                if not size_data:
+                    raise ConnectionError(
+                        "No data received from Wazuh socket.")
+                size = struct.unpack("<I", size_data)[0]
+                # Read the response message
+                recv_msg = b''
+                while len(recv_msg) < size:
+                    chunk = wlogtest_conn.recv(
+                        size - len(recv_msg), socket.MSG_WAITALL)
+                    if not chunk:
+                        break
+                    recv_msg += chunk
+                return recv_msg
+        except socket.error as e:
+            raise ConnectionError(
+                f"Failed to communicate with Wazuh socket: {e}")
+
+    @staticmethod
+    def wrap_command(command: str, parameters: dict) -> str:
         """Wrap data with Wazuh daemon protocol information.
 
         Args:
@@ -36,12 +86,19 @@ class WazuhDaemonProtocol:
         Returns:
             str: The JSON-formatted message.
         """
-        msg = self.protocol.copy()
+        msg: dict[str, Any] = {
+            'version': 1,
+            'origin': {
+                'name': "wazuh-logtest",
+                'module': "wazuh-logtest"
+            }
+        }
         msg['command'] = command
         msg['parameters'] = parameters
         return json.dumps(msg)
 
-    def unwrap(self, msg: bytes) -> Any:
+    @staticmethod
+    def unwrap_response(msg: bytes) -> Any:
         """Unwrap data from Wazuh daemon protocol information.
 
         Args:
@@ -64,77 +121,15 @@ class WazuhDaemonProtocol:
         return json_msg  # Return the entire message
 
 
-class WazuhSocket:
-    """Handles communication with the Wazuh socket (includes message framing)."""
-
-    def __init__(self, file: str) -> None:
-        self.__file = file
-
-    def is_socket_open(self) -> bool:
-        """Check if the socket is open.
-
-        Returns:
-            bool: True if the logtest socket is open, False otherwise.
-        """
-
-        # Create a TCP/IP socket
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(5)  # Set a timeout for the connection attempt
-
-        try:
-            # Try to connect to the host and port
-            s.connect(self.__file)
-            return True  # Socket is open
-        except (socket.timeout, socket.error):
-            return False  # Socket is closed or connection failed
-        finally:
-            s.close()  # Close the socket
-
-    def send(self, msg: str) -> bytes:
-        """Send and receive data to Wazuh socket with message size framing.
-
-        Args:
-            msg (str): The message to send.
-
-        Returns:
-            bytes: The received response.
-
-        Raises:
-            ConnectionError: If communication fails.
-        """
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wlogtest_conn:
-                wlogtest_conn.connect(self.__file)
-                encoded_msg = msg.encode('utf-8')
-                wlogtest_conn.sendall(struct.pack("<I", len(encoded_msg)) + encoded_msg)
-                # Read the size header
-                size_data = wlogtest_conn.recv(4, socket.MSG_WAITALL)
-                if not size_data:
-                    raise ConnectionError("No data received from Wazuh socket.")
-                size = struct.unpack("<I", size_data)[0]
-                # Read the response message
-                recv_msg = b''
-                while len(recv_msg) < size:
-                    chunk = wlogtest_conn.recv(size - len(recv_msg), socket.MSG_WAITALL)
-                    if not chunk:
-                        break
-                    recv_msg += chunk
-                return recv_msg
-        except socket.error as e:
-            raise ConnectionError(f"Failed to communicate with Wazuh socket: {e}")
-
-
-class WazuhLogtest:
+class _WazuhLogtestSession:
     """Interacts with the wazuh-logtest feature to process logs and manage sessions."""
 
     def __init__(self, location: str = "stdin", log_format: str = "syslog") -> None:
-        self.protocol = WazuhDaemonProtocol()
-        self.socket = WazuhSocket(LOGTEST_SOCKET)
-        self.fixed_fields = {
+        self.__fixed_fields: dict[str, str] = {
             'location': location,
             'log_format': log_format
         }
-        self.last_token = ""
+        self.__last_token = ""
 
     def process_log(self, log: str, token: Optional[str] = None, options: Optional[dict] = None) -> dict:
         """Send a log event to wazuh-logtest and receive the outcome.
@@ -151,7 +146,7 @@ class WazuhLogtest:
         if len(log.encode('utf-8')) > WAZUH_MAX_EVENT_SIZE:
             raise ValueError(f"Log size exceeds the maximum limit of {WAZUH_MAX_EVENT_SIZE} bytes.")
 
-        data: dict[str, Any] = self.fixed_fields.copy()
+        data: dict[str, Any] = self.__fixed_fields.copy()
         if token:
             data['token'] = token
         # Remove leading and trailing newlines
@@ -159,22 +154,24 @@ class WazuhLogtest:
         if options:
             data['options'] = options
 
-        request = self.protocol.wrap('log_processing', data)
+        request: str = _WazuhLogtestHelpers.wrap_command('log_processing', data)
+
         logging.debug('Request: %s', request)
-        recv_packet = self.socket.send(request)
+        recv_packet = _WazuhLogtestHelpers.send(request)
         logging.debug('Reply: %s', recv_packet.decode('utf-8'))
         # Unwrap the response
-        reply: dict = self.protocol.unwrap(recv_packet)
+        reply: dict = _WazuhLogtestHelpers.unwrap_response(recv_packet)
+
         # Update the session token
         new_token = reply.get('data', {}).get('token')
         if new_token:
-            self.last_token = new_token
+            self.__last_token = new_token
         return reply
 
     def remove_last_session(self) -> None:
         """Remove the last session to clean up."""
-        if self.last_token:
-            self.remove_session(self.last_token)
+        if self.__last_token:
+            self.remove_session(self.__last_token)
 
     def remove_session(self, token: str) -> bool:
         """Remove session by token.
@@ -185,12 +182,14 @@ class WazuhLogtest:
         Returns:
             bool: True if the session was removed successfully.
         """
-        data: dict[str, Any] = self.fixed_fields.copy()
+        data: dict[str, Any] = self.__fixed_fields.copy()
         data['token'] = token
-        request = self.protocol.wrap('remove_session', data)
+
+        request: str = _WazuhLogtestHelpers.wrap_command('remove_session', data)
+
         try:
-            recv_packet = self.socket.send(request)
-            reply = self.protocol.unwrap(recv_packet)
+            recv_packet = _WazuhLogtestHelpers.send(request)
+            reply: dict = _WazuhLogtestHelpers.unwrap_response(recv_packet)
             codemsg = int(reply.get('codemsg', -1))
             return codemsg >= 0
         except Exception as e:
@@ -354,11 +353,11 @@ def send_log(log: str, location: str = "stdin", log_format: str = "syslog", toke
     Returns:
         LogtestResponse: The response from Wazuh logtest.
     """
-    w_logtest = WazuhLogtest(location=location, log_format=log_format)
+    w_logtest = _WazuhLogtestSession(location=location, log_format=log_format)
     options: dict[str, Any] = {}
 
     try:
-        response_dict = w_logtest.process_log(log, token=token, options=options)
+        response_dict: dict[str, Any] = w_logtest.process_log(log, token=token, options=options)
         return LogtestResponse(response_dict)
     except Exception as e:
         logging.error('Error processing log: %s', e)
@@ -377,7 +376,7 @@ def send_multiple_logs(logs: list[str], location: str = "stdin", log_format: str
     Returns:
         list[LogtestResponse]: A list of responses from Wazuh logtest.
     """
-    w_logtest = WazuhLogtest(location=location, log_format=log_format)
+    w_logtest = _WazuhLogtestSession(location=location, log_format=log_format)
     if options is None:
         options = {}
     responses = []

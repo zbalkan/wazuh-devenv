@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import unittest
 
-from internal.logtest import LOGTEST_SOCKET, WazuhSocket
+from internal.logtest import LOGTEST_SOCKET, _WazuhLogtestHelpers
 
 
 class TestWazuhService(unittest.TestCase):
@@ -28,8 +28,7 @@ class TestWazuhService(unittest.TestCase):
         self.assertTrue(expr=running, msg="Wazuh service is not running")
 
     def test_4_logtest_socket_open(self) -> None:
-        socket = WazuhSocket(LOGTEST_SOCKET)
-        self.assertTrue(socket.is_socket_open(),
+        self.assertTrue(_WazuhLogtestHelpers.is_socket_open(),
                         msg="Wazuh logtest socket is not open")
 
 
