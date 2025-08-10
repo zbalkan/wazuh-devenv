@@ -65,6 +65,57 @@ options:
   --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
 ```
 
+All custom tests should be placed in the `src/tests/regression_tests/custom/` directory. Test files must start with `test_` to be discovered by the test runner.
+Here is a basic template for a new test file, for example `test_my_new_rule.py`:
+
+```python
+import unittest
+from internal.logtest import send_log, send_multiple_logs, LogtestResponse, LogtestStatus
+
+class TestMyNewRule(unittest.TestCase):
+
+    def test_single_log_triggers_alert(self):
+        """
+        Tests if a specific log message triggers the expected rule.
+        """
+        # 1. Define the log message you want to test
+        log_message = "sshd: Invalid user admin from 192.168.1.100"
+
+        # 2. Send the log to the logtest engine
+        response: LogtestResponse = send_log(log_message)
+
+        # 3. Assert the results
+        # Check that a rule matched
+        self.assertEqual(response.status, LogtestStatus.RuleMatch)
+        
+        # Check that the correct rule ID was triggered
+        self.assertEqual(response.rule_id, "5710") # Replace with your custom rule ID
+
+        # (Optional) Check the alert level
+        self.assertEqual(response.rule_level, 5)
+
+    def test_multiple_logs_for_stateful_rule(self):
+        """
+        Tests a stateful rule that requires multiple events to trigger.
+        """
+        # 1. Define the sequence of log messages
+        log_sequence = [
+            "sshd: Failed password for invalid user user1 from 1.2.3.4 port 1234 ssh2",
+            "sshd: Failed password for invalid user user2 from 1.2.3.4 port 1234 ssh2",
+            "sshd: Failed password for invalid user user3 from 1.2.3.4 port 1234 ssh2",
+            "sshd: Failed password for invalid user user4 from 1.2.3.4 port 1234 ssh2"
+        ]
+
+        # 2. Send the sequence of logs in a single session
+        responses: list[LogtestResponse] = send_multiple_logs(log_sequence)
+
+        # 3. Assert the result of the FINAL event
+        # The last response should contain the stateful alert
+        last_response = responses[-1]
+        self.assertEqual(last_response.status, LogtestStatus.RuleMatch)
+        self.assertEqual(last_response.rule_id, "5712") # Replace with your composite rule ID
+```
+
 ### Test coverage
 
 ```shell
