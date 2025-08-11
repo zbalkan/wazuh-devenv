@@ -150,7 +150,7 @@ class _WazuhLogtestSession:
         if token:
             data['token'] = token
         # Remove leading and trailing newlines
-        data['event'] = self.__remove_newlines(log)
+        data['event'] = log.strip('\n')
         if options:
             data['options'] = options
 
@@ -195,15 +195,6 @@ class _WazuhLogtestSession:
         except Exception as e:
             logging.error(f"Failed to remove session: {e}")
             return False
-
-    def __remove_newlines(self, log: str) -> str:
-        if (log == ""):
-            return log
-        if (log[0] == '\n'):
-            log = log[1:]
-        if (log[-1] == '\n'):
-            log = log[:-1]
-        return log
 
 
 class LogtestStatus(Enum):
