@@ -2,6 +2,7 @@ import json
 import logging
 import socket
 import struct
+from collections.abc import MutableMapping
 from enum import Enum, auto
 from typing import Any, Final, Optional
 
@@ -235,7 +236,16 @@ class LogtestResponse:
         full_log (str): The original log as reconstructed or normalized by Wazuh.
         timestamp (str): The timestamp associated with the log.
         location (str): The location field indicating the origin of the log.
+        srcip (Optional[str]): Static field extracted by decoders, if any.
+        srcport (Optional[str]): Static field extracted by decoders, if any.
+        dstip (Optional[str]): Static field extracted by decoders, if any.
+        dstport (Optional[str]): Static field extracted by decoders, if any.
+        protocol (Optional[str]): Static field extracted by decoders, if any.
+        action (Optional[str]): Static field extracted by decoders, if any.
+        url (Optional[str]): Static field extracted by decoders, if any. Used rarely.
+        extra_data (Optional[str]): Static field extracted by decoders. Used rarely.
         decoder (Optional[str]): The name of the decoder applied to the log, if any.
+        decoder_parent (Optional[str]): The parent decoder of the decoder applied to the log, if any.
         rule_id (Optional[str]): The ID of the rule matched, if any.
         rule_level (Optional[int]): The severity level of the matched rule.
         rule_description (Optional[str]): A description of the matched rule.
@@ -243,7 +253,7 @@ class LogtestResponse:
         rule_mitre_ids (list[str]): The list of MITRE ATT&CK TTP IDs associated with the matched rule.
 
     Methods:
-        get_data_field(field_path: list[str]) -> Optional[Any]:
+        get_dynamic_field_value(field_path: list[str]) -> Optional[Any]:
             Retrieves nested parsed data using a path of dictionary keys.
 
     Usage:
@@ -256,7 +266,25 @@ class LogtestResponse:
     full_log: str
     timestamp: str
     location: str
+
+    # Static fields (ref: https://documentation.wazuh.com/current/user-manual/ruleset/decoders/dynamic-fields.html)
+    srcip: Optional[str] = None
+    srcport: Optional[str] = None
+    dstip: Optional[str] = None
+    dstport: Optional[str] = None
+    protocol: Optional[str] = None
+    action: Optional[str] = None
+    url: Optional[str] = None  # Used rarely
+    extra_data: Optional[str] = None  # Used rarely
+
+    # user: Optional[str] = None  # An alias to dstuser (only one of the two can be used)
+    # id: str  # Mandatory field for unique ID of each alert. Cannot be used in detection, therefore ignored.
+    # system_name: str  # Obsolete
+    # agent: dict[str, str]  # It will always be the test machine. Uncomment if you have rules for specific agents
+
+    # These are optional as there may not be any rule matching the log
     decoder: Optional[str] = None
+    decoder_parent: Optional[str] = None
     rule_id: Optional[str] = None
     rule_level: Optional[str] = None
     rule_description: Optional[str] = None
@@ -284,7 +312,18 @@ class LogtestResponse:
         self.location = __output.get('location', '')
 
         # Other data fields
-        self.__data_fields = __output.get('data', {})
+        self.__data_fields: dict[str, Any] = __output.get('data', {})
+        self.__flattened_fields = self.__flatten(self.__data_fields)
+
+        # Static fields
+        self.srcip = self.__data_fields.get('srcip', None)
+        self.srcport = self.__data_fields.get('srcport', None)
+        self.dstip = self.__data_fields.get('dstip', None)
+        self.dstport = self.__data_fields.get('dstport', None)
+        self.protocol = self.__data_fields.get('protocol', None)
+        self.action = self.__data_fields.get('action', None)
+        self.url = self.__data_fields.get('url', None)  # Used rarely
+        self.extra_data = self.__data_fields.get('extra_data', None)  # Used rarely
 
         # Decoder information
         __decoder_info: Optional[dict] = __output.get('decoder', None)
@@ -295,6 +334,7 @@ class LogtestResponse:
             return
 
         self.decoder = __decoder_info.get('name', None)
+        self.decoder_parent = __decoder_info.get('parent', None)
 
         # Rule information
         __rule_info: Optional[dict] = __output.get('rule', None)
@@ -310,6 +350,12 @@ class LogtestResponse:
         self.rule_level = __rule_info.get('level', None)
         self.rule_description = __rule_info.get('description', None)
 
+        _description = __rule_info.get('description', None)
+        if isinstance(_description, list):
+            self.rule_description = '. '.join(_description)
+        else:
+            self.rule_description = _description
+
         __groups = __rule_info.get('groups', None)
         if (__groups):
             self.rule_groups = set(__groups)
@@ -319,17 +365,53 @@ class LogtestResponse:
             __ids = __mitre.get('id', [])
             self.rule_mitre_ids = set(__ids) if not isinstance(__ids, str) else {__ids}
 
-    def get_data_field(self, field_path: list[str]) -> Optional[Any]:
-        """Retrieve nested data fields using a list of keys."""
-        data = self.__data_fields
-        for key in field_path:
-            if isinstance(data, dict):
-                data = data.get(key)
-                if data is None:
-                    return None
+    def __flatten(self, dictionary: dict | MutableMapping, parent_key=False, separator='.', crumbs=False) -> dict[Any, Any]:
+        """
+        Turn a nested dictionary into a flattened dictionary
+        :param dictionary: The dictionary to flatten
+        :param parent_key: The string to prepend to dictionary's keys
+        :param separator: The string used to separate flattened keys
+        :return: A flattened dictionary
+        """
+
+        items = []
+        for key, value in dictionary.items():
+            if crumbs:
+                print('checking:', key)
+            new_key = str(parent_key) + separator + key if parent_key else key
+            if isinstance(value, MutableMapping):
+                if crumbs:
+                    print(new_key, ': dict found')
+                if not value.items():
+                    if crumbs:
+                        print('Adding key-value pair:', new_key, None)
+                    items.append((new_key, None))
+                else:
+                    items.extend(self.__flatten(value, new_key, separator).items())
+            elif isinstance(value, list):
+                if crumbs:
+                    print(new_key, ': list found')
+                if len(value):
+                    for k, v in enumerate(value):
+                        items.extend(
+                            self.__flatten({str(k): v}, new_key, separator).items())
+                else:
+                    if crumbs:
+                        print('Adding key-value pair:', new_key, None)
+                    items.append((new_key, None))
             else:
-                return None
-        return data
+                if crumbs:
+                    print('Adding key-value pair:', new_key, value)
+                items.append((new_key, value))
+        return dict(items)
+
+    def get_dynamic_field_names(self) -> list[str]:
+        """Retreive the list of dynamic fields"""
+        return list(self.__flattened_fields.keys())
+
+    def get_dynamic_field_value(self, flatened_field_name: str) -> Optional[Any]:
+        """Retrieve nested dynamic fields using a flattened field name."""
+        return self.__flattened_fields.get(flatened_field_name, None)
 
 
 def send_log(log: str, location: str = "stdin", log_format: str = "syslog", token: Optional[str] = None) -> LogtestResponse:

@@ -30,9 +30,11 @@ class TestCustomFortigateRules(unittest.TestCase):
         self.assertEqual(response.rule_level, 3)
 
         # Ensure the parsed data is correct
-        self.assertEqual(response.get_data_field(['date']), '2019-10-10')
-        self.assertEqual(response.get_data_field(['time']), '17:01:31')
-        self.assertEqual(response.get_data_field(['devname']), 'FG111E-INFT2')
+        self.assertEqual(
+            response.get_dynamic_field_value('date'), '2019-10-10')
+        self.assertEqual(response.get_dynamic_field_value('time'), '17:01:31')
+        self.assertEqual(response.get_dynamic_field_value(
+            'devname'), 'FG111E-INFT2')
 
         # Ensure the rule groups are correct
         self.assertIn('custom', response.rule_groups)
