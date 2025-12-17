@@ -15,7 +15,16 @@ fi
 
 decoders_dir=$(realpath ./decoders)
 rules_dir=$(realpath ./rules)
+chown root:wazuh "$rules_dir"
+chmod 770 "$rules_dir"
+
 chown wazuh:wazuh "$rules_dir"/*
 chmod 660 "$rules_dir"/*
+
+chown root:wazuh "$decoders_dir"
+chmod 770 "$decoders_dir"
 chown wazuh:wazuh "$decoders_dir"/*
 chmod 660 "$decoders_dir"/*
+
+chmod +x "src/tester.py"
+chmod +x "src/coverage.py"

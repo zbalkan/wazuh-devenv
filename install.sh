@@ -524,6 +524,9 @@ configure_permissions() {
         warn "No files found in $decoders_dir, skipping file permissions."
     fi
 
+    chmod +x "src/tester.py"
+    chmod +x "src/coverage.py"
+    
     info "Permissions configured successfully."
 }
 
