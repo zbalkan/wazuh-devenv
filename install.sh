@@ -342,7 +342,7 @@ enable_windows_eventlog_rule_testing(){
     <decoded_as>windows_eventchannel</decoded_as>
     <field name="win.system.providerName">\.+</field>
     <options>no_full_log</options>
-    <description>Group of windows rules</description>
+    <description>Group of windows rules.</description>
   </rule>
 EOF
 )
@@ -354,7 +354,7 @@ EOF
     <!-- <decoded_as>windows_eventchannel</decoded_as> -->
     <field name="win.system.providerName">\.+</field>
     <options>no_full_log</options>
-    <description>Group of windows rules</description>
+    <description>Group of windows rules.</description>
     <decoded_as>json</decoded_as>
   </rule>
 EOF
