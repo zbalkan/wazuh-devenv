@@ -12,7 +12,7 @@ Refer to the [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model]
 2. Limit the WSL memory usage in `~/wsl.config` by adding `memory=16GB` or however you like. Wazuh is allocating as much memory as it can, so it is better to limit WSL as a whole.
 3. Clone the repo to the preferred location for development. For me, using `~/wazuh-devenv` is easier.
 4. Run the script `sudo ./install.sh` to start installation.
-5. The script will ask you to copy rules and decoders to the new locations. After you copied them, hit `y` and continue. Otherwise it will rollback the changes.
+5. The script will ask you to copy your custom rules and decoders to the new locations. After you copied them, hit `y` and continue. Otherwise it will rollback the changes.
 6. The script will ask you to provide the username you are going to use in WSL for development. Ensure you typed it correctly.
 7. The installation and configuration will be completed successfully. If any error occurs, messages would be displayed for the user to fix the issues manually.
 8. Initiate VS Code from the WSL for first engagement by navigating to the repository -such as `~/wazuh-devenv`, and typing `code .`. You don't have to keep the WSL terminal on afterwards.
