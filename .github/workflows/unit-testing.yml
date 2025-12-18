@@ -2,12 +2,21 @@ name: Wazuh unit testing
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+
   schedule:
     - cron: "0 0 * * 0"
+
+  push:
+    branches: ["main"]
+    paths:
+      - "src/tests/**/*.py"
+      - "**/*.xml"
+
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/tests/**/*.py"
+      - "**/*.xml"
 
 jobs:
   tests:
