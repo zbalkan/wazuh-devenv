@@ -1,5 +1,9 @@
 # wazuh-devenv
 
+[![CodeQL Advanced](https://github.com/zbalkan/wazuh-devenv/actions/workflows/codeql.yml/badge.svg)](https://github.com/zbalkan/wazuh-devenv/actions/workflows/codeql.yml)
+[![DevSkim](https://github.com/zbalkan/wazuh-devenv/actions/workflows/devskim.yml/badge.svg)](https://github.com/zbalkan/wazuh-devenv/actions/workflows/devskim.yml)
+[![Wazuh unit testing](https://github.com/zbalkan/wazuh-devenv/actions/workflows/unit-testing.yml/badge.svg)](https://github.com/zbalkan/wazuh-devenv/actions/workflows/unit-testing.yml)
+
 The project aims to create a development environment for detection engineers using Wazuh. While it is designed to utilize a `wazuh-manager` installed on WSL to allow testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for the future.
 
 Refer to the [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model](https://zaferbalkan.com/wazuh-devenv/) article for more information.
@@ -35,6 +39,10 @@ Refer to the [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model]
 10. Proceed with your choice of IDE.
 
 You are ready to update and test your logs locally. You can combine the script into your CI/CD pipeline for deployment.
+
+### CI/CD Usage
+
+See the workflow file for an example.
 
 ## Sample rules
 

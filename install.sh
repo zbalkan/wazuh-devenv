@@ -65,10 +65,24 @@ if [[ "${TRACE-0}" == "1" ]]; then
     set -o xtrace
 fi
 
-if [[ "${1-}" =~ ^-*h(elp)?$ ]]; then
-    info 'This script sets up the Wazuh Manager for wazuh-devenv.'
-    exit
-fi
+# globals
+QUIET=false
+WAZUH_USER_ENV="${WAZUH_USER:-}"
+LOG_BASE="/var/ossec/logs"
+
+# parameters
+for arg in "$@"; do
+    case "$arg" in
+        -q|--quiet)
+            QUIET=true
+            LOG_BASE="/tmp/wazuh-logs"
+            ;;
+        h|-h|--h|help|-help|--help)
+            info 'This script sets up the Wazuh Manager for wazuh-devenv.'
+            exit 0
+            ;;
+    esac
+done
 
 cd "$(dirname "$0")"
 
@@ -111,8 +125,6 @@ detect_service_manager() {
     fi
 }
 
-
-# Detect package manager
 detect_package_manager() {
     info "Detecting available package manager..."
 
@@ -132,7 +144,6 @@ detect_package_manager() {
     fi
 }
 
-# Install Wazuh Manager based on the detected package manager
 install_wazuh_manager() {
     info "Checking if Wazuh Manager is already installed..."
 
@@ -160,7 +171,6 @@ install_wazuh_manager() {
     fi
 }
 
-# Functions for APT
 setup_apt_repo_and_install() {
     info "Installing necessary APT dependencies..."
     if ! apt-get install -y gnupg apt-transport-https; then
@@ -215,7 +225,6 @@ setup_apt_repo_and_install() {
     apt-get update
 }
 
-# Functions for YUM
 setup_yum_repo_and_install() {
     info "Checking if Wazuh GPG key is already imported..."
     if rpm -q gpg-pubkey &>/dev/null; then
@@ -262,7 +271,6 @@ EOF
     info "Disabling Wazuh repository after installation to prevent accidental upgrades..."
     sed -i "s|^enabled=1|enabled=0|" /etc/yum.repos.d/wazuh.repo
 }
-
 
 check_sed_z_support() {
     if ! echo -e "line1\nline2" | sed -z 's/line1/changed/' &>/dev/null; then
@@ -461,6 +469,11 @@ setup_bind_mounts() {
 }
 
 ask_for_user_files() {
+    if [[ "$QUIET" == "true" ]]; then
+        info "Quiet mode enabled: assuming custom rules and decoders are already in place."
+        return 0
+    fi
+
     info "You can now add your custom rules and decoders to the following directories:"
     info "Rules: $rules_dir"
     info "Decoders: $decoders_dir"
@@ -531,28 +544,33 @@ configure_permissions() {
 }
 
 add_user_to_wazuh_group() {
-    while true; do
-        read -r -p "Enter the username to add to the wazuh group: " username
-
-        # Check if the user exists on the system
-        if id "$username" &>/dev/null; then
-            # Verify if the user was added to the group
-            if groups "$username" | grep -q "\bwazuh\b"; then
-                info "User $username is already in the wazuh group. Skipping..."
-            else
-                usermod -a -G wazuh "$username"
-                info "User $username has been added to the wazuh group."
-            fi
-            break
-        else
-            error "User $username does not exist. Please enter a valid username."
-            read -r -p "Do you want to try again? (y/N): " try_again
-            if [[ "$try_again" != "y" ]]; then
-                warn "Exiting without adding any user to the wazuh group."
-                break
-            fi
+    if [[ "$QUIET" == "true" ]]; then
+        if [[ -z "$WAZUH_USER_ENV" ]]; then
+            error "Quiet mode requires WAZUH_USER_ENV environment variable to be set."
+            exit 1
         fi
-    done
+        username="$WAZUH_USER_ENV"
+    else
+        read -r -p "Enter the username to add to the wazuh group: " username
+    fi
+
+    if id "$username" &>/dev/null; then
+        if groups "$username" | grep -q "\bwazuh\b"; then
+            info "User $username is already in the wazuh group. Skipping..."
+        else
+            usermod -a -G wazuh "$username"
+            info "User $username has been added to the wazuh group."
+        fi
+    else
+        error "User $username does not exist."
+        [[ "$QUIET" == "true" ]] && exit 1
+    fi
+}
+
+prepare_log_dir() {
+    info "Preparing log directory: $LOG_BASE"
+    mkdir -p "$LOG_BASE"
+    chmod 777 "$LOG_BASE"    
 }
 
 start_wazuh_service() {
@@ -584,6 +602,39 @@ start_wazuh_service() {
         error "No valid service manager detected. Wazuh Manager cannot be started."
         exit 1
     fi
+}
+
+wait_for_wazuh_ready() {
+    local SOCKET="/var/ossec/queue/sockets/logtest"
+    local TIMEOUT=120
+    local STABLE_FOR=5
+    local stable=0
+    local waited=0
+
+    info "Waiting for Wazuh logtest socket to stabilize..."
+
+    while true; do
+        if [[ -S "$SOCKET" ]]; then
+            stable=$((stable + 1))
+            if (( stable >= STABLE_FOR )); then
+                info "Wazuh logtest socket is stable."
+                return 0
+            fi
+        else
+            stable=0
+        fi
+
+        sleep 1
+        waited=$((waited + 1))
+
+        if (( waited >= TIMEOUT )); then
+            error "Timeout waiting for stable logtest socket."
+
+            ls -l /var/ossec/queue/sockets || true
+            journalctl -u wazuh-manager --no-pager | tail -n 50 || true
+            exit 1
+        fi
+    done
 }
 
 validate_configuration(){
@@ -625,8 +676,10 @@ main() {
     ask_for_user_files
     configure_permissions
     add_user_to_wazuh_group
-    start_wazuh_service
+    prepare_log_dir
     validate_configuration
+    start_wazuh_service
+    wait_for_wazuh_ready
     info "Wazuh Manager setup completed successfully."
 }
 

@@ -1,0 +1,88 @@
+name: Wazuh unit testing
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "0 0 * * 0"
+
+jobs:
+  tests:
+    name: Wazuh unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify Python version
+        run: |
+          python --version
+          python - <<'EOF'
+          import sys
+          assert sys.version_info >= (3, 11), sys.version
+          EOF
+
+      - name: Install Wazuh (quiet mode)
+        env:
+          WAZUH_USER: runner
+        run: |
+          sudo -E bash install.sh --quiet
+
+      - name: Wait for Wazuh to be ready
+        run: |
+          sudo bash -c '
+            SOCKET="/var/ossec/queue/sockets/logtest"
+            TIMEOUT=120
+            waited=0
+
+            echo "Waiting for Wazuh logtest socket before tests..."
+
+            until [ -S "$SOCKET" ]; do
+              sleep 2
+              waited=$((waited + 2))
+              if [ "$waited" -ge "$TIMEOUT" ]; then
+                echo "Socket not ready after ${TIMEOUT}s"
+                ls -l /var/ossec/queue/sockets || true
+                journalctl -u wazuh-manager --no-pager | tail -n 50 || true
+                exit 1
+              fi
+            done
+
+            echo "Wazuh is ready for tests."
+          '
+
+      - name: Run unit tests
+        env:
+          WAZUH_LOG_DIR: /tmp/wazuh-logs
+          PYTHONUNBUFFERED: "1"
+        run: |
+          sudo python src/tester.py --verbosity 2
+
+
+  coverage:
+    name: Coverage analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run coverage
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python src/coverage.py
