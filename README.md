@@ -6,8 +6,6 @@
 
 The project aims to create a development environment for detection engineers using Wazuh. While it is designed to utilize a `wazuh-manager` installed on WSL to allow testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for the future.
 
-Refer to the [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model](https://zaferbalkan.com/wazuh-devenv/) article for more information.
-
 ## Installation
 
 ### For WSL
@@ -223,3 +221,8 @@ setfacl -d -m o::--- "$rules_dir"
 | Tests | Rules and decoders |
 |-------|--------------------|
 | overwrite.ini<br>test_expr_negation_geoip.ini<br>test_expr_negation.ini<br>test_features.ini<br>test_osmatch_regex.ini<br>test_osregex_regex_geoip.ini<br>test_osregex_regex.ini<br>test_pcre2_regex_geoip.ini<br>test_pcre2_regex.ini<br>test_static_filters_geoip.ini<br>test_static_filters.ini | test_decoders.xml<br>test_expr_negation_decoders.xml<br>test_expr_negation_geoip_rules.xml<br>test_expr_negation_rules.xml<br>test_osmatch_regex_decoders.xml<br>test_osmatch_regex_rules.xml<br>test_osregex_regex_decoders.xml<br>test_osregex_regex_geoip_rules.xml<br>test_osregex_regex_rules.xml<br>test_overwrite_decoders.xml<br>test_overwrite_rules.xml<br>test_pcre2_regex_decoders.xml<br>test_pcre2_regex_geoip_rules.xml<br>test_pcre2_regex_rules.xml<br>test_rules.xml<br>test_static_filters_decoders.xml<br>test_static_filters_rules.xml |
+
+## References
+
+- [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model](https://zaferbalkan.com/wazuh-devenv/) 
+- [Detection-as-Code for Wazuh 4.x: Log replay for behavioral testing](https://zaferbalkan.com/log-replay/)
