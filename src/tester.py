@@ -15,6 +15,38 @@ DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decod
 ENCODING: Final[str] = "utf-8"
 LOG_PATH: Final[str] = "/tmp/tester.log"
 
+def _failed(result: unittest.TestResult) -> bool:
+    """Return True if the test result contains any errors or failures."""
+    return bool(result.errors or result.failures)
+
+
+def _run_suite(module: str, *, verbosity: int, failfast: bool) -> bool:
+    """
+    Run tests for `module` and return True if the suite passed.
+
+    If `failfast` is True, abort immediately on failure.
+    """
+    result: Optional[unittest.TestResult] = run_tests(module, verbosity=verbosity)
+
+    if result is None:
+        logging.error("Test runner returned no result for %s", module)
+        if failfast:
+            raise SystemExit(1)
+        return False
+
+    if _failed(result):
+        logging.error(
+            "Test suite failed: %s (errors=%d, failures=%d)",
+            module,
+            len(result.errors),
+            len(result.failures),
+        )
+        if failfast:
+            raise SystemExit(1, result.errors, result.failures)
+        return False
+
+    logging.info("Test suite passed: %s", module)
+    return True
 
 def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 1) -> Optional[unittest.result.TestResult]:
     """Discover and run tests in the specified directory with a given pattern."""
@@ -32,31 +64,44 @@ def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 
     return test_result
 
 
-def main(disable_preflight: bool = False, disable_builtin: bool = False, disable_custom: bool = False, disable_behavioral: bool = False, verbosity: int = 1) -> None:
-    # Run preflight tests
-    if disable_preflight is False:
-        preflight_result = run_tests(
-            'tests.preflight_tests', verbosity=verbosity)
-        if preflight_result and (preflight_result.errors or preflight_result.failures):
-            print('Preflight tests failed. Exiting.')
-            logging.error('Preflight tests failed. Exiting.')
-            exit(1)
+def main(disable_preflight: bool = False,
+         disable_builtin: bool = False,
+         disable_custom: bool = False,
+         disable_behavioral: bool = False,
+         verbosity: int = 1,
+         failfast:bool = False) -> None:
 
-    # Conditionally run built-in rule tests if enabled
-    if disable_builtin is False:
-        run_tests('tests.regression_tests.builtin', verbosity=verbosity)
+    # Preflight: keep original behavior (failures are fatal immediately).
+    if not disable_preflight:
+        preflight_ok = _run_suite(
+                "tests.preflight_tests",
+                verbosity=verbosity,
+                failfast=True,
+            )
 
-    # Run custom rule tests
-    if disable_custom is False:
-        run_tests('tests.regression_tests.custom', verbosity=verbosity)
+        if not preflight_ok:
+            msg = "Preflight tests failed. Exiting."
+            raise SystemExit(msg)
 
-    # Run behavioral tests
-    if disable_behavioral is False:
-        run_tests('tests.behavioral_tests', verbosity=verbosity)
+    suites = (
+        (disable_builtin, "tests.regression_tests.builtin"),
+        (disable_custom, "tests.regression_tests.custom"),
+        (disable_behavioral, "tests.behavioral_tests"),
+    )
 
-    print('All tests completed. Exiting.')
+    success = True
+    for disabled, module in suites:
+        if disabled:
+            continue
+        success = _run_suite(module, verbosity=verbosity, failfast=failfast) and success
+
     print(f"See the logs at {LOG_PATH}")
 
+    if success:
+        print("All tests completed successfully. Exiting.")
+        return
+
+    raise Exception("Tests failed.", )
 
 def setup_logging() -> None:
     logging.basicConfig(
@@ -97,6 +142,11 @@ def parse_arguments() -> argparse.Namespace:
         default=1,
         help="Set verbosity level for test output (0, 1, or 2). Default is 1."
     )
+    parser.add_argument(
+        '--failfast',
+        action='store_false',
+        help="Stop on first failed test. Disabled by default."
+    )
 
     # Hidden flag to disable preflight tests
     # Beware that this flag is hidden and should be used with caution
@@ -124,8 +174,8 @@ if __name__ == "__main__":
              disable_builtin=args.disable_builtin,
              disable_custom=args.disable_custom,
              disable_behavioral=args.disable_behavioral,
-             verbosity=args.verbosity)
-
+             verbosity=args.verbosity,
+             failfast=args.failfast)
         logging.info('Exiting.')
     except KeyboardInterrupt:
         print('Cancelled by user.')
