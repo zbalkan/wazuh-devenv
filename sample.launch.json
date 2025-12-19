@@ -5,49 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run all tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "src/tester.py",
-            "console": "integratedTerminal",
-        },
-        {
-            "name": "Disable built-in",
+            "name": "Help",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
             "args": [
-                "--disable-builtin"
+                "-h"
             ]
         },
         {
-            "name": "Disable custom",
+            "name": "Coverage",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/tester.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--disable-builtin"
-            ]
+            "program": "src/coverage.py",
+            "console": "integratedTerminal"
         },
         {
-            "name": "Disable behavioral",
+            "name": "Only preflight",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
             "args": [
-                "--disable-behavioral"
-            ]
-        },
-        {
-            "name": "Preflight + behavioral",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "src/tester.py",
-            "console": "integratedTerminal",
-            "args": [
+                "--disable-behavioral",
                 "--disable-builtin",
                 "--disable-custom"
             ]
@@ -64,32 +45,51 @@
             ]
         },
         {
-            "name": "Only preflight",
+            "name": "Preflight + behavioral",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
             "args": [
-                "--disable-behavioral",
                 "--disable-builtin",
                 "--disable-custom"
             ]
         },
         {
-            "name": "Help",
+            "name": "Preflight + builtin + custom",
             "type": "debugpy",
             "request": "launch",
             "program": "src/tester.py",
             "console": "integratedTerminal",
             "args": [
-                "-h"
+                "--disable-behavioral"
             ]
         },
         {
-            "name": "Coverage",
+            "name": "Preflight + builtin + behavioral",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/coverage.py",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-builtin"
+            ]
+        },
+        {
+            "name": "Preflight + custom + behavioral",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--disable-builtin"
+            ]
+        },
+        {
+            "name": "Preflight + builtin + custom + behavioral",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/tester.py",
             "console": "integratedTerminal"
         }
     ]
