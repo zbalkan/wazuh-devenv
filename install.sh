@@ -94,6 +94,7 @@ pkg_for_cmd() {
             tee)      echo "coreutils" ;;
             flock)    echo "util-linux" ;;
             realpath) echo "coreutils" ;;
+            venv)     echo "python3-venv" ;;
             *)        echo "$cmd" ;;
         esac
     else # YUM/DNF family
@@ -106,9 +107,85 @@ pkg_for_cmd() {
             tee)      echo "coreutils" ;;
             flock)    echo "util-linux" ;;
             realpath) echo "coreutils" ;;
+            venv)     echo "python3" ;; 
             *)        echo "$cmd" ;;
         esac
     fi
+}
+
+run_as_invoker() {
+    # Run command as the user who invoked sudo; fallback to root if not under sudo.
+    # Uses a login shell so PATH and user env are sensible.
+    local cmd="$*"
+    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+        sudo -u "${SUDO_USER}" -H bash -lc "$cmd"
+    else
+        bash -lc "$cmd"
+    fi
+}
+
+ensure_python_venv_support() {
+    # Verify that python3 has venv module support; install if needed.
+    if python3 -m venv --help &>/dev/null; then
+        return 0
+    fi
+
+    warn "Python venv module not available; installing venv support..."
+
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        install_packages python3-venv
+    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
+        # Usually bundled, but if it's missing/broken, try ensuring python3 is present.
+        # (You can later refine this to python3-pip/ensurepip if you hit a real distro that needs it.)
+        install_packages python3
+    else
+        error "Unknown package manager: $PKG_MANAGER"
+        exit 1
+    fi
+
+    python3 -m venv --help &>/dev/null || {
+        error "python3 -m venv still not available after installing support."
+        exit 1
+    }
+}
+
+ensure_venv() {
+    local venv_dir=".venv"
+
+    # Idempotent: if venv exists, do nothing
+    if [[ -f "${venv_dir}/pyvenv.cfg" ]]; then
+        info "Virtual environment already exists at ${venv_dir}. Skipping..."
+        return 0
+    fi
+
+    # If directory exists but doesn't look like a venv, recreate it
+    if [[ -e "${venv_dir}" ]]; then
+        warn "${venv_dir} exists but is not a valid venv. Recreating..."
+        rm -rf "${venv_dir}"
+    fi
+
+    info "Creating Python virtual environment in ${venv_dir} (as invoking user)..."
+
+    # First attempt
+    if run_as_invoker "cd \"${PWD}\" && python3 -m venv \"${venv_dir}\""; then
+        :
+    else
+        warn "python3 -m venv failed; installing venv support and retrying..."
+
+        ensure_python_venv_support
+
+        run_as_invoker "cd \"${PWD}\" && python3 -m venv \"${venv_dir}\"" || {
+            error "Failed to create ${venv_dir} even after installing venv support."
+            exit 1
+        }
+    fi
+
+    # Ensure ownership is correct for the invoking user
+    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" ]]; then
+        chown -R "${SUDO_UID}:${SUDO_GID}" "${venv_dir}" || true
+    fi
+
+    info "Virtual environment ready: ${venv_dir}"
 }
 
 # Install dependencies by command name (dedupe packages, install, then re-check)
@@ -208,8 +285,12 @@ check_dependencies() {
     info "Checking required dependencies..."
 
     # Include early-used tools too, so a rerun on a minimal system still self-heals.
+    # Add 'venv' as a pseudo-command dependency to install python3-venv on APT.
     local -a dependencies=("tee" "flock" "realpath" "awk" "grep" "wget" "git" "python3")
     ensure_commands "${dependencies[@]}"
+
+    # Create .venv as the invoking (non-root) user even though the script runs under sudo
+    ensure_venv
 
     info "All required dependencies are installed."
 }
@@ -743,7 +824,6 @@ validate_configuration(){
 # main function
 main() {
     info "Starting Wazuh Manager setup..."
-    detect_package_manager
     check_dependencies
     detect_service_manager
     install_wazuh_manager
