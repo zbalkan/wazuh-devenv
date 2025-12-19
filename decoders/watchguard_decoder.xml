@@ -1,0 +1,9 @@
+<decoder name="watchguard">
+    <prematch>^\.*firewall:</prematch>
+</decoder>
+
+<decoder name="watchguard">
+    <parent>watchguard</parent>
+    <regex>(\w+)\s*(\S*)\s*(\S*):\s*msg_id="(\S*)"\s*(\w*)\s*(\.*)\s+(\d+)\s*(\w+)\s*(\d*)\s*(\d*)\s+(\S*)\s*(\S*)\s*(\d*)\s*(\d*)\s*</regex>
+    <order>device_id,device_name,device_type,msg_id,action,policy,bytes,protocol,src_zone,dst_zone,srcip,dstip,srcport,dstport</order>
+</decoder>
