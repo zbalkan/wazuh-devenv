@@ -7,11 +7,11 @@ from typing import Final
 
 ENCODING: Final[str] = "utf-8"
 BUILTIN_RULES_DIR: Final[str] = "/var/ossec/ruleset/rules"
-CUSTOM_RULES_DIR: Final[str] = "./rules"
-TESTS_ROOT: Final[str] = "./src/tests/regression_tests/custom"
+CUSTOM_RULES_DIR: Final[str] = "../rules"
+TESTS_ROOT: Final[str] = "../src/tests/regression_tests/custom"
 
 
-def collect_rule_ids_from_rules(rules_dir: str) -> set[int]:
+def _collect_rule_ids_from_rules(rules_dir: str) -> set[int]:
     rule_ids = set()
     for root, _, files in os.walk(rules_dir):
         for file in files:
@@ -32,7 +32,7 @@ def collect_rule_ids_from_rules(rules_dir: str) -> set[int]:
     return rule_ids
 
 
-def collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], int]:
+def _collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], int]:
     referenced_ids = set()
     test_func_count = 0
 
@@ -84,7 +84,7 @@ def collect_referenced_rule_ids_from_tests(test_root: str) -> tuple[set[int], in
     return referenced_ids, test_func_count
 
 
-def report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count: int) -> None:
+def _report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count: int) -> None:
     uncovered = defined_ids - tested_ids
     coverage_percent = ((len(defined_ids) - len(uncovered)) / len(defined_ids)) * 100 if defined_ids else 0
 
@@ -100,7 +100,7 @@ def report_coverage(defined_ids: set[int], tested_ids: set[int], test_func_count
             print(f"  - {rule_id}")
 
 
-if __name__ == "__main__":
+def run() -> None:
 
     # The BUILTIN_RULES_DIR is here for long term maintenance purposes.
     # User is not responsible for those tests.
@@ -117,15 +117,15 @@ if __name__ == "__main__":
     # print(f"  [*] Found {len(builtin_rules)} rules...")
 
     print("[*] Scanning custom rules directory...")
-    custom_rules = collect_rule_ids_from_rules(CUSTOM_RULES_DIR)
+    custom_rules = _collect_rule_ids_from_rules(CUSTOM_RULES_DIR)
     print(f"  [*] Found {len(custom_rules)} rules...")
 
     # all_rule_ids = builtin_rules.union(custom_rules)
     all_rule_ids = custom_rules
     print("[*] Scanning test files...")
-    referenced_ids, test_func_count = collect_referenced_rule_ids_from_tests(
+    referenced_ids, test_func_count = _collect_referenced_rule_ids_from_tests(
         TESTS_ROOT)
     print(f"  [*] Found {len(referenced_ids)} rule IDs in tests...")
 
     print("[*] Generating report...")
-    report_coverage(all_rule_ids, referenced_ids, test_func_count)
+    _report_coverage(all_rule_ids, referenced_ids, test_func_count)
