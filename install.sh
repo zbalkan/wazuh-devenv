@@ -10,27 +10,6 @@ fi
 LOGFILE="/var/log/wazuh_setup.log"
 LOCKFILE="/var/lock/wazuh-setup.lock"
 
-# Ensure stdout and stderr are logged
-exec > >(tee -a "$LOGFILE") 2>&1
-exec 2> >(tee -a "$LOGFILE" >&2)
-
-# Ensure only one instance of the script runs
-exec 200>"$LOCKFILE"
-
-# Try to acquire lock, fail if another instance is running
-if ! flock -n 200; then
-    error "[ERROR] Another instance of the script is running (Lock file: $LOCKFILE). Exiting..."
-    exit 1
-fi
-
-# Trap cleanup function on exit, script crash, or termination signal
-cleanup() {
-    info "Cleaning up and releasing lock..."
-    flock -u 200  # Unlock file
-    rm -f "$LOCKFILE"
-}
-trap cleanup EXIT SIGINT SIGTERM
-
 # Function to display informational messages
 info() {
     local BLUE='\033[0;34m'
@@ -52,11 +31,146 @@ error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-# Ensure the script is executed as root
+# Ensure the script is executed as root (do this before touching /var/log, /var/lock)
 if [ "$(id -u)" -ne 0 ]; then
     error "This script can be executed only as root. Exiting..."
     exit 1
 fi
+
+PKG_MANAGER=""
+SERVICE_MANAGER=""
+
+detect_package_manager() {
+    info "Detecting available package manager..."
+
+    if command -v apt-get &>/dev/null; then
+        info "Detected APT package manager."
+        PKG_MANAGER="APT"
+    elif command -v dnf &>/dev/null; then
+        info "Detected DNF package manager."
+        PKG_MANAGER="YUM"
+    elif command -v yum &>/dev/null; then
+        info "Detected YUM package manager."
+        PKG_MANAGER="YUM"
+    else
+        error "No supported package manager found (APT or YUM/DNF). Exiting..."
+        exit 1
+    fi
+}
+
+install_packages() {
+    local -a pkgs=("$@")
+    [[ ${#pkgs[@]} -eq 0 ]] && return 0
+
+    info "Installing packages: ${pkgs[*]}"
+
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y --no-install-recommends "${pkgs[@]}"
+    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
+        if command -v dnf &>/dev/null; then
+            dnf -y install "${pkgs[@]}"
+        else
+            yum -y install "${pkgs[@]}"
+        fi
+    else
+        error "Unknown package manager: $PKG_MANAGER"
+        exit 1
+    fi
+}
+
+# Map a command name to one or more package names for the detected family
+pkg_for_cmd() {
+    local cmd="$1"
+
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        case "$cmd" in
+            awk)      echo "gawk" ;;
+            grep)     echo "grep" ;;
+            wget)     echo "wget" ;;
+            git)      echo "git" ;;
+            python3)  echo "python3" ;;
+            tee)      echo "coreutils" ;;
+            flock)    echo "util-linux" ;;
+            realpath) echo "coreutils" ;;
+            *)        echo "$cmd" ;;
+        esac
+    else # YUM/DNF family
+        case "$cmd" in
+            awk)      echo "gawk" ;;
+            grep)     echo "grep" ;;
+            wget)     echo "wget" ;;
+            git)      echo "git" ;;
+            python3)  echo "python3" ;;
+            tee)      echo "coreutils" ;;
+            flock)    echo "util-linux" ;;
+            realpath) echo "coreutils" ;;
+            *)        echo "$cmd" ;;
+        esac
+    fi
+}
+
+# Install dependencies by command name (dedupe packages, install, then re-check)
+ensure_commands() {
+    local -a cmds=("$@")
+    local -a missing_cmds=()
+    local -a pkgs=()
+
+    local cmd pkg
+    for cmd in "${cmds[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing_cmds+=("$cmd")
+            warn "Missing dependency: $cmd"
+            pkg="$(pkg_for_cmd "$cmd")"
+            pkgs+=($pkg)  # pkg can expand to multiple tokens (rare), intentional
+        fi
+    done
+
+    [[ ${#missing_cmds[@]} -eq 0 ]] && return 0
+
+    # Deduplicate package list
+    local -A seen=()
+    local -a uniq_pkgs=()
+    local p
+    for p in "${pkgs[@]}"; do
+        [[ -n "${seen[$p]:-}" ]] && continue
+        seen[$p]=1
+        uniq_pkgs+=("$p")
+    done
+
+    install_packages "${uniq_pkgs[@]}"
+
+    # Re-check commands
+    for cmd in "${missing_cmds[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            error "Dependency still missing after install attempt: $cmd"
+            exit 1
+        fi
+    done
+}
+
+# Detect package manager early and bootstrap early-needed tools *before* logging/locking and realpath usage
+detect_package_manager
+ensure_commands tee flock realpath
+
+# Ensure stdout and stderr are logged (now tee exists)
+exec > >(tee -a "$LOGFILE") 2>&1
+exec 2> >(tee -a "$LOGFILE" >&2)
+
+# Ensure only one instance of the script runs (now flock exists)
+exec 200>"$LOCKFILE"
+if ! flock -n 200; then
+    error "Another instance of the script is running (Lock file: $LOCKFILE). Exiting..."
+    exit 1
+fi
+
+cleanup() {
+    info "Cleaning up and releasing lock..."
+    flock -u 200  # Unlock file
+    rm -f "$LOCKFILE"
+}
+trap cleanup EXIT SIGINT SIGTERM
 
 set -o errexit
 set -o nounset
@@ -85,85 +199,17 @@ done
 
 cd "$(dirname "$0")"
 
-# Declare internal variables
+# Declare internal variables (now realpath exists)
 decoders_dir=$(realpath ./decoders)
 rules_dir=$(realpath ./rules)
 ossec_conf="/var/ossec/etc/ossec.conf"
-PKG_MANAGER=""
-SERVICE_MANAGER=""
-
-detect_package_manager() {
-    info "Detecting available package manager..."
-
-    if [ -x "$(command -v apt-get)" ]; then
-        info "Detected APT package manager."
-        PKG_MANAGER="APT"
-    elif [ -x "$(command -v dnf)" ]; then
-        # Since dnf is the modern replacement for yum, it is checked first.
-        info "Detected DNF package manager."
-        PKG_MANAGER="YUM"
-    elif [ -x "$(command -v yum)" ]; then
-        info "Detected YUM package manager."
-        PKG_MANAGER="YUM"
-    else
-        error "No supported package manager found (APT or YUM/DNF). Exiting..."
-        exit 1
-    fi
-}
-
-install_packages() {
-    local -a pkgs=("$@")
-    [[ ${#pkgs[@]} -eq 0 ]] && return 0
-
-    info "Installing missing packages: ${pkgs[*]}"
-
-    if [[ "$PKG_MANAGER" == "APT" ]]; then
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y "${pkgs[@]}"
-    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
-        if command -v dnf &>/dev/null; then
-            dnf -y install "${pkgs[@]}"
-        else
-            yum -y install "${pkgs[@]}"
-        fi
-    else
-        error "Unknown package manager: $PKG_MANAGER"
-        exit 1
-    fi
-}
 
 check_dependencies() {
     info "Checking required dependencies..."
 
-    # Define required commands
-    local dependencies=("awk" "grep" "wget" "git" "python3")
-    local -a missing_pkgs=()
-
-    for cmd in "${dependencies[@]}"; do
-        if ! command -v "$cmd" &>/dev/null; then
-            warn "Missing dependency: $cmd"
-            case "$cmd" in
-                awk)     missing_pkgs+=("gawk") ;;
-                grep)    missing_pkgs+=("grep") ;;
-                wget)    missing_pkgs+=("wget") ;;
-                git)     missing_pkgs+=("git") ;;
-                python3) missing_pkgs+=("python3") ;;
-                *)       missing_pkgs+=("$cmd") ;;
-            esac
-        fi
-    done
-
-    if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-        install_packages "${missing_pkgs[@]}"
-    fi
-
-    for cmd in "${dependencies[@]}"; do
-        if ! command -v "$cmd" &>/dev/null; then
-            error "Dependency still missing after install attempt: $cmd"
-            exit 1
-        fi
-    done
+    # Include early-used tools too, so a rerun on a minimal system still self-heals.
+    local -a dependencies=("tee" "flock" "realpath" "awk" "grep" "wget" "git" "python3")
+    ensure_commands "${dependencies[@]}"
 
     info "All required dependencies are installed."
 }
