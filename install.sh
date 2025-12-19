@@ -90,11 +90,14 @@ pkg_for_cmd() {
             grep)     echo "grep" ;;
             wget)     echo "wget" ;;
             git)      echo "git" ;;
+            gpg) echo "gnupg" ;;
             python3)  echo "python3" ;;
+            venv)     echo "python3-venv" ;;
             tee)      echo "coreutils" ;;
             flock)    echo "util-linux" ;;
             realpath) echo "coreutils" ;;
-            venv)     echo "python3-venv" ;;
+            mountpoint) echo "util-linux" ;;
+            sed) echo "sed" ;;
             *)        echo "$cmd" ;;
         esac
     else # YUM/DNF family
@@ -103,24 +106,29 @@ pkg_for_cmd() {
             grep)     echo "grep" ;;
             wget)     echo "wget" ;;
             git)      echo "git" ;;
+            gpg) echo "gnupg2" ;;
             python3)  echo "python3" ;;
+            venv)     echo "python3" ;; 
             tee)      echo "coreutils" ;;
             flock)    echo "util-linux" ;;
             realpath) echo "coreutils" ;;
-            venv)     echo "python3" ;; 
+            mountpoint) echo "util-linux" ;;
+            sed) echo "sed" ;;
             *)        echo "$cmd" ;;
         esac
     fi
 }
 
 run_as_invoker() {
-    # Run command as the user who invoked sudo; fallback to root if not under sudo.
-    # Uses a login shell so PATH and user env are sensible.
-    local cmd="$*"
+    # Usage: run_as_invoker <cmd> [args...]
     if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-        sudo -u "${SUDO_USER}" -H bash -lc "$cmd"
+        if command -v sudo &>/dev/null; then
+            sudo -u "${SUDO_USER}" -H -- "$@"
+        else
+            su -s /bin/bash - "${SUDO_USER}" -c "$(printf '%q ' "$@")"
+        fi
     else
-        bash -lc "$cmd"
+        "$@"
     fi
 }
 
@@ -152,6 +160,11 @@ ensure_python_venv_support() {
 ensure_venv() {
     local venv_dir=".venv"
 
+    if [[ -L "${venv_dir}" ]]; then
+        error "${venv_dir} is a symlink; refusing to modify it for safety."
+        exit 1
+    fi
+
     # Idempotent: if venv exists, do nothing
     if [[ -f "${venv_dir}/pyvenv.cfg" ]]; then
         info "Virtual environment already exists at ${venv_dir}. Skipping..."
@@ -159,22 +172,18 @@ ensure_venv() {
     fi
 
     # If directory exists but doesn't look like a venv, recreate it
-    if [[ -e "${venv_dir}" ]]; then
-        warn "${venv_dir} exists but is not a valid venv. Recreating..."
-        rm -rf "${venv_dir}"
+    if [[ -e "${venv_dir}" && ! -d "${venv_dir}" ]]; then
+        error "${venv_dir} exists but is not a directory; refusing to remove."
+        exit 1
     fi
 
     info "Creating Python virtual environment in ${venv_dir} (as invoking user)..."
-
-    # First attempt
-    if run_as_invoker "cd \"${PWD}\" && python3 -m venv \"${venv_dir}\""; then
+    if run_as_invoker python3 -m venv "${venv_dir}"; then
         :
     else
         warn "python3 -m venv failed; installing venv support and retrying..."
-
         ensure_python_venv_support
-
-        run_as_invoker "cd \"${PWD}\" && python3 -m venv \"${venv_dir}\"" || {
+        run_as_invoker python3 -m venv "${venv_dir}" || {
             error "Failed to create ${venv_dir} even after installing venv support."
             exit 1
         }
@@ -194,13 +203,13 @@ ensure_commands() {
     local -a missing_cmds=()
     local -a pkgs=()
 
-    local cmd pkg
     for cmd in "${cmds[@]}"; do
         if ! command -v "$cmd" &>/dev/null; then
             missing_cmds+=("$cmd")
             warn "Missing dependency: $cmd"
-            pkg="$(pkg_for_cmd "$cmd")"
-            pkgs+=($pkg)  # pkg can expand to multiple tokens (rare), intentional
+            local -a pkg_arr=()
+            read -r -a pkg_arr <<< "$(pkg_for_cmd "$cmd")"   # split intentionally, no globbing
+            pkgs+=("${pkg_arr[@]}")
         fi
     done
 
@@ -232,10 +241,17 @@ detect_package_manager
 ensure_commands tee flock realpath
 
 # Ensure stdout and stderr are logged (now tee exists)
+mkdir -p "$(dirname "$LOGFILE")" || true
+touch "$LOGFILE" 2>/dev/null || LOGFILE="/tmp/wazuh_setup.log" # Fallback path in case of failure
 exec > >(tee -a "$LOGFILE") 2>&1
-exec 2> >(tee -a "$LOGFILE" >&2)
 
 # Ensure only one instance of the script runs (now flock exists)
+# Prefer /run/lock if present
+if [[ -d /run/lock ]]; then
+    LOCKFILE="/run/lock/wazuh-setup.lock"
+else
+    mkdir -p "$(dirname "$LOCKFILE")"
+fi
 exec 200>"$LOCKFILE"
 if ! flock -n 200; then
     error "Another instance of the script is running (Lock file: $LOCKFILE). Exiting..."
@@ -249,7 +265,15 @@ cleanup() {
 }
 trap cleanup EXIT SIGINT SIGTERM
 
+on_error() {
+    local ec=$?
+    error "Failed (exit=$ec) at line ${BASH_LINENO[0]}: ${BASH_COMMAND}"
+    exit "$ec"
+}
+trap on_error ERR
+
 set -o errexit
+set -o errtrace
 set -o nounset
 set -o pipefail
 if [[ "${TRACE-0}" == "1" ]]; then
@@ -286,10 +310,11 @@ check_dependencies() {
 
     # Include early-used tools too, so a rerun on a minimal system still self-heals.
     # Add 'venv' as a pseudo-command dependency to install python3-venv on APT.
-    local -a dependencies=("tee" "flock" "realpath" "awk" "grep" "wget" "git" "python3")
+    local -a dependencies=("tee" "flock" "realpath" "awk" "grep" "wget" "git" "gpg" "python3" "sed" "mountpoint")
     ensure_commands "${dependencies[@]}"
 
     # Create .venv as the invoking (non-root) user even though the script runs under sudo
+    ensure_python_venv_support
     ensure_venv
 
     info "All required dependencies are installed."
@@ -310,30 +335,35 @@ detect_service_manager() {
     fi
 }
 
+is_wazuh_installed() {
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        dpkg-query -W -f='${Status}' wazuh-manager 2>/dev/null | grep -q "install ok installed"
+    else
+        rpm -q wazuh-manager &>/dev/null
+    fi
+}
+
+installed_wazuh_version() {
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        dpkg-query -W -f='${Version}\n' wazuh-manager 2>/dev/null || true
+    else
+        rpm -q --qf '%{VERSION}-%{RELEASE}\n' wazuh-manager 2>/dev/null || true
+    fi
+}
+
 install_wazuh_manager() {
     info "Checking if Wazuh Manager is already installed..."
 
+   if is_wazuh_installed; then
+        installed_version="$(installed_wazuh_version)"
+        info "Wazuh Manager is already installed (Version: ${installed_version:-unknown}). Skipping installation."
+        return 0
+    fi
+    info "Wazuh Manager is not installed. Proceeding to install..."
     if [[ "$PKG_MANAGER" == "APT" ]]; then
-        if apt show wazuh-manager 2>/dev/null | grep -q "Installed: "; then
-            installed_version=$(apt show wazuh-manager 2>/dev/null | grep "Installed:" | awk '{print $2}')
-            info "Wazuh Manager is already installed (Version: $installed_version). Skipping installation."
-            return 0
-        else
-            info "Wazuh Manager is not installed. Proceeding to install..."
-            setup_apt_repo_and_install
-        fi
-    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
-        if yum info wazuh-manager 2>/dev/null | grep -q "Installed Packages"; then
-            installed_version=$(yum info wazuh-manager 2>/dev/null | grep "Version" | awk '{print $3}')
-            info "Wazuh Manager is already installed (Version: $installed_version). Skipping installation."
-            return 0
-        else
-            info "Wazuh Manager is not installed. Proceeding to install..."
-            setup_yum_repo_and_install
-        fi
+        setup_apt_repo_and_install
     else
-        error "Unknown package manager detected: $PKG_MANAGER. Exiting..."
-        exit 1
+        setup_yum_repo_and_install
     fi
 }
 
@@ -345,7 +375,7 @@ setup_apt_repo_and_install() {
     fi
 
     info "Checking if Wazuh GPG key is already imported..."
-    if gpg --list-keys --keyring /usr/share/keyrings/wazuh.gpg | grep -q "Wazuh"; then
+    if [[ -f /usr/share/keyrings/wazuh.gpg ]] && gpg --list-keys --keyring /usr/share/keyrings/wazuh.gpg 2>/dev/null | grep -q "Wazuh"; then
         info "Wazuh GPG key is already imported."
     else
         info "Adding Wazuh GPG key for APT..."
@@ -363,6 +393,12 @@ setup_apt_repo_and_install() {
     fi
 
     info "Checking if Wazuh APT repository is already configured..."
+    local repo_file=/etc/apt/sources.list.d/wazuh.list
+
+    # Enable if installed but disabled for reinstall
+    if [[ -f "$repo_file" ]] && grep -q "packages.wazuh.com/4.x/apt" "$repo_file"; then
+        sed -i 's|^#deb |deb |' "$repo_file"
+    fi
     if [[ -f /etc/apt/sources.list.d/wazuh.list ]] && grep -q "https://packages.wazuh.com/4.x/apt/" /etc/apt/sources.list.d/wazuh.list; then
         info "Wazuh APT repository is already configured."
     else
@@ -392,22 +428,17 @@ setup_apt_repo_and_install() {
 }
 
 setup_yum_repo_and_install() {
-    info "Checking if Wazuh GPG key is already imported..."
-    if rpm -q gpg-pubkey &>/dev/null; then
-        info "Wazuh GPG key is already imported."
-    else
-        info "Adding Wazuh GPG key for YUM..."
-        if ! wget -qO /tmp/GPG-KEY-WAZUH https://packages.wazuh.com/key/GPG-KEY-WAZUH; then
-            error "Failed to download Wazuh GPG key. Check network connectivity."
-            exit 1
-        fi
-
-        if ! rpm --import /tmp/GPG-KEY-WAZUH; then
-            error "Failed to import Wazuh GPG key."
-            exit 1
-        fi
-        rm -f /tmp/GPG-KEY-WAZUH
+    info "Importing Wazuh GPG key for YUM (idempotent)..."
+    if ! wget -qO /tmp/GPG-KEY-WAZUH https://packages.wazuh.com/key/GPG-KEY-WAZUH; then
+        error "Failed to download Wazuh GPG key. Check network connectivity."
+        exit 1
     fi
+
+    if ! rpm --import /tmp/GPG-KEY-WAZUH; then
+        error "Failed to import Wazuh GPG key."
+        exit 1
+    fi
+    rm -f /tmp/GPG-KEY-WAZUH
 
     info "Checking if Wazuh repository is already configured..."
     if [[ -f /etc/yum.repos.d/wazuh.repo ]]; then
@@ -584,22 +615,37 @@ create_empty_folders() {
 setup_bind_mounts() {
     info "Setting up bind mounts for Wazuh..."
 
+    if [[ "$rules_dir" =~ [[:space:]] || "$decoders_dir" =~ [[:space:]] ]]; then
+        error "Rules/decoders path contains whitespace; fstab bind-mount entries would break."
+        exit 1
+    fi
+
     # Unmount existing mounts if they exist
     umount /var/ossec/etc/rules 2>/dev/null || true
     umount /var/ossec/etc/decoders 2>/dev/null || true
 
     # Move existing files from /var/ossec/etc/rules to $rules_dir if there are any
-    if [ "$(ls -A /var/ossec/etc/rules)" ]; then
-        info "Moving existing files from /var/ossec/etc/rules to $rules_dir..."
-        mv /var/ossec/etc/rules/* "$rules_dir"/
-        info "Files moved successfully."
+    if [[ -d /var/ossec/etc/rules ]]; then
+        shopt -s dotglob nullglob
+        files=(/var/ossec/etc/rules/*)
+        shopt -u dotglob nullglob
+        if (( ${#files[@]} )); then
+            info "Moving existing files from /var/ossec/etc/rules to $rules_dir..."
+            mv -- "${files[@]}" "$rules_dir"/
+            info "Files moved successfully."
+        fi
     fi
 
     # Move existing files from /var/ossec/etc/decoders to $decoders_dir if there are any
-    if [ "$(ls -A /var/ossec/etc/decoders)" ]; then
-        info "Moving existing files from /var/ossec/etc/decoders to $decoders_dir..."
-        mv /var/ossec/etc/decoders/* "$decoders_dir"/
-        info "Files moved successfully."
+    if [[ -d /var/ossec/etc/decoders ]]; then
+        shopt -s dotglob nullglob
+        files=(/var/ossec/etc/decoders/*)
+        shopt -u dotglob nullglob
+        if (( ${#files[@]} )); then
+            info "Moving existing files from /var/ossec/etc/decoders to $decoders_dir..."
+            mv -- "${files[@]}" "$decoders_dir"/
+            info "Files moved successfully."
+        fi
     fi
 
     # Bind mount rules_dir to /var/ossec/etc/rules
@@ -621,12 +667,12 @@ setup_bind_mounts() {
     fi
 
     # Ensure persistence across reboots by adding to /etc/fstab
-    if ! grep -qs "$rules_dir /var/ossec/etc/rules" /etc/fstab; then
+    if ! grep -Fqs "$rules_dir /var/ossec/etc/rules none bind 0 0" /etc/fstab; then
         echo "$rules_dir /var/ossec/etc/rules none bind 0 0" >> /etc/fstab
         info "Added $rules_dir bind mount to /etc/fstab for /var/ossec/etc/rules"
     fi
 
-    if ! grep -qs "$decoders_dir /var/ossec/etc/decoders" /etc/fstab; then
+    if ! grep -Fqs "$decoders_dir /var/ossec/etc/decoders none bind 0 0" /etc/fstab; then
         echo "$decoders_dir /var/ossec/etc/decoders none bind 0 0" >> /etc/fstab
         info "Added $decoders_dir bind mount to /etc/fstab for /var/ossec/etc/decoders"
     fi
