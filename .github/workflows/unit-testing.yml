@@ -1,4 +1,4 @@
-name: Wazuh unit testing
+name: Wazuh Quality Assurane
 
 on:
   workflow_dispatch:
@@ -74,7 +74,7 @@ jobs:
           WAZUH_LOG_DIR: /tmp/wazuh-logs
           PYTHONUNBUFFERED: "1"
         run: |
-          sudo python src/tester.py --verbosity 2
+          sudo python src/tester.py --verbosity 2 --failfast
 
 
   coverage:
