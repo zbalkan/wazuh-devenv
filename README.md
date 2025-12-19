@@ -164,7 +164,7 @@ If you are using VS Code, you can use the debug configuration `sample.launch.jso
 
 ## Logs
 
-You can find the tester logs in `/var/ossec/logs/tester.log`.
+You can find the tester logs in `/tmp/tester.log`.
 
 ```plaintext
 2025-02-08T19:27:50+0000:root:INFO:Starting tester v0.1

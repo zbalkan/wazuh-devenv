@@ -13,13 +13,7 @@ APP_NAME: Final[str] = 'wazuh-devenv tester'
 APP_VERSION: Final[str] = '0.2'
 DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decoder testing tool."
 ENCODING: Final[str] = "utf-8"
-LOG_DIR: Final[str] = os.getenv("WAZUH_LOG_DIR", "/var/ossec/logs")
-LOG_PATH: Final[str] = os.path.join(LOG_DIR, "tester.log")
-
-
-def get_log_path() -> str:
-    log_dir = os.getenv("WAZUH_LOG_DIR", "/var/ossec/logs")
-    return os.path.join(log_dir, "tester.log")
+LOG_PATH: Final[str] = "/tmp/tester.log"
 
 
 def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 1) -> Optional[unittest.result.TestResult]:
@@ -41,7 +35,8 @@ def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 
 def main(disable_preflight: bool = False, disable_builtin: bool = False, disable_custom: bool = False, disable_behavioral: bool = False, verbosity: int = 1) -> None:
     # Run preflight tests
     if disable_preflight is False:
-        preflight_result = run_tests('tests.preflight_tests', verbosity=verbosity)
+        preflight_result = run_tests(
+            'tests.preflight_tests', verbosity=verbosity)
         if preflight_result and (preflight_result.errors or preflight_result.failures):
             print('Preflight tests failed. Exiting.')
             logging.error('Preflight tests failed. Exiting.')
@@ -65,7 +60,7 @@ def main(disable_preflight: bool = False, disable_builtin: bool = False, disable
 
 def setup_logging() -> None:
     logging.basicConfig(
-        filename=get_log_path(),
+        filename=LOG_PATH,
         encoding=ENCODING,
         format="%(asctime)s.%(msecs)03d:%(name)s:%(levelname)s:%(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
