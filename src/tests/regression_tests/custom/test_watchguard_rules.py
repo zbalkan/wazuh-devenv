@@ -3,8 +3,7 @@ import unittest
 import internal.logtest as lt
 
 
-# TODO: Rename the class
-class LocalRules(unittest.TestCase):
+class WatchguardFirewallRules(unittest.TestCase):
 
     def test_rule_110000(self) -> None:
         logs = [
