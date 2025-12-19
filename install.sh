@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Check if we are working with WSL. This is informational.
-if grep -i -q Microsoft /proc/version; then
+if [[ -r /proc/version ]] && [[ "$(</proc/version)" =~ [Mm]icrosoft ]]; then
     echo "Bash is running on WSL. Proceeding..."
 else
     echo "Bash is NOT running on WSL. Proceeding..."
@@ -68,14 +68,13 @@ fi
 # globals
 QUIET=false
 WAZUH_USER_ENV="${WAZUH_USER:-}"
-LOG_BASE="/var/ossec/logs"
 
 # parameters
 for arg in "$@"; do
     case "$arg" in
         -q|--quiet)
             QUIET=true
-            LOG_BASE="/tmp/wazuh-logs"
+            info "Unattended installation started."
             ;;
         h|-h|--h|help|-help|--help)
             info 'This script sets up the Wazuh Manager for wazuh-devenv.'
@@ -93,16 +92,75 @@ ossec_conf="/var/ossec/etc/ossec.conf"
 PKG_MANAGER=""
 SERVICE_MANAGER=""
 
+detect_package_manager() {
+    info "Detecting available package manager..."
+
+    if [ -x "$(command -v apt-get)" ]; then
+        info "Detected APT package manager."
+        PKG_MANAGER="APT"
+    elif [ -x "$(command -v dnf)" ]; then
+        # Since dnf is the modern replacement for yum, it is checked first.
+        info "Detected DNF package manager."
+        PKG_MANAGER="YUM"
+    elif [ -x "$(command -v yum)" ]; then
+        info "Detected YUM package manager."
+        PKG_MANAGER="YUM"
+    else
+        error "No supported package manager found (APT or YUM/DNF). Exiting..."
+        exit 1
+    fi
+}
+
+install_packages() {
+    local -a pkgs=("$@")
+    [[ ${#pkgs[@]} -eq 0 ]] && return 0
+
+    info "Installing missing packages: ${pkgs[*]}"
+
+    if [[ "$PKG_MANAGER" == "APT" ]]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y "${pkgs[@]}"
+    elif [[ "$PKG_MANAGER" == "YUM" ]]; then
+        if command -v dnf &>/dev/null; then
+            dnf -y install "${pkgs[@]}"
+        else
+            yum -y install "${pkgs[@]}"
+        fi
+    else
+        error "Unknown package manager: $PKG_MANAGER"
+        exit 1
+    fi
+}
+
 check_dependencies() {
     info "Checking required dependencies..."
 
     # Define required commands
-    local dependencies=("awk" "grep" "wget" "git")
+    local dependencies=("awk" "grep" "wget" "git" "python3")
+    local -a missing_pkgs=()
 
-    # Loop through each dependency and check if it's available
     for cmd in "${dependencies[@]}"; do
         if ! command -v "$cmd" &>/dev/null; then
-            error "Missing dependency: $cmd. Please install it before proceeding."
+            warn "Missing dependency: $cmd"
+            case "$cmd" in
+                awk)     missing_pkgs+=("gawk") ;;
+                grep)    missing_pkgs+=("grep") ;;
+                wget)    missing_pkgs+=("wget") ;;
+                git)     missing_pkgs+=("git") ;;
+                python3) missing_pkgs+=("python3") ;;
+                *)       missing_pkgs+=("$cmd") ;;
+            esac
+        fi
+    done
+
+    if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+        install_packages "${missing_pkgs[@]}"
+    fi
+
+    for cmd in "${dependencies[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            error "Dependency still missing after install attempt: $cmd"
             exit 1
         fi
     done
@@ -121,25 +179,6 @@ detect_service_manager() {
         SERVICE_MANAGER="sysvinit"
     else
         error "No supported service manager found (systemctl or service). Exiting..."
-        exit 1
-    fi
-}
-
-detect_package_manager() {
-    info "Detecting available package manager..."
-
-    if [ -x "$(command -v apt-get)" ]; then
-        info "Detected APT package manager."
-        PKG_MANAGER="APT"
-    elif [ -x "$(command -v dnf)" ]; then
-        # Since dnf is the modern replacement for yum, it is checked first.
-        info "Detected DNF package manager."
-        PKG_MANAGER="YUM"
-    elif [ -x "$(command -v yum)" ]; then
-        info "Detected YUM package manager."
-        PKG_MANAGER="YUM"
-    else
-        error "No supported package manager found (APT or YUM/DNF). Exiting..."
         exit 1
     fi
 }
@@ -567,12 +606,6 @@ add_user_to_wazuh_group() {
     fi
 }
 
-prepare_log_dir() {
-    info "Preparing log directory: $LOG_BASE"
-    mkdir -p "$LOG_BASE"
-    chmod 777 "$LOG_BASE"    
-}
-
 start_wazuh_service() {
     info "Starting Wazuh Manager service..."
 
@@ -664,8 +697,8 @@ validate_configuration(){
 # main function
 main() {
     info "Starting Wazuh Manager setup..."
-    check_dependencies
     detect_package_manager
+    check_dependencies
     detect_service_manager
     install_wazuh_manager
     update_configuration
@@ -676,7 +709,6 @@ main() {
     ask_for_user_files
     configure_permissions
     add_user_to_wazuh_group
-    prepare_log_dir
     validate_configuration
     start_wazuh_service
     wait_for_wazuh_ready
