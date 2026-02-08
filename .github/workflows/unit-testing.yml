@@ -1,4 +1,4 @@
-name: Wazuh Quality Assurane
+name: Wazuh Quality Assurance
 
 on:
   workflow_dispatch:
