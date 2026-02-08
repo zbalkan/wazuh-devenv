@@ -2,7 +2,7 @@
 
 # Ensure the script is executed as root
 if [ "$(id -u)" -ne 0 ]; then
-    error "This script can be executed only as root. Exiting..."
+    echo "This script can be executed only as root. Exiting..."
     exit 1
 fi
 
