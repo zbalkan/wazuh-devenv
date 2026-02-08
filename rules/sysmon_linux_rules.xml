@@ -1,0 +1,21 @@
+<group name="sysmon-linux,">
+    <rule id="100000" level="2">
+        <decoded_as>sysmon-linux</decoded_as>
+        <description>Sysmon Linux alerts grouped.</description>
+    </rule>
+    <rule id="100001" level="3">
+        <if_sid>100000</if_sid>
+        <field name="system.eventId">^1$</field>
+        <description>Sysmon Linux: A new process is created</description>
+    </rule>
+    <rule id="100002" level="3">
+        <if_sid>100000</if_sid>
+        <field name="system.eventId">^3$</field>
+        <description>Sysmon Linux: New connections on the machine</description>
+    </rule>
+    <rule id="100003" level="3">
+        <if_sid>100000</if_sid>
+        <field name="system.eventId">^5$</field>
+        <description>Sysmon Linux: A process terminated</description>
+    </rule>
+</group>

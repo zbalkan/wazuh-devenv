@@ -1,0 +1,23 @@
+<decoder name="sysmon-linux">
+    <program_name>sysmon</program_name>
+</decoder>
+
+<decoder name="sysmon-linux-fields">
+    <parent>sysmon-linux</parent>
+    <regex offset="after_parent">\pEventID\p(\d+)\p/EventID\p</regex>
+    <order>system.eventId</order>
+</decoder>
+
+<decoder name="sysmon-linux-fields">
+    <parent>sysmon-linux</parent>
+    <regex offset="after_parent">\pTimeCreated SystemTime="(\d+-\d+-\d+T\d+:\d+:\d+.\d+\w)"</regex>
+    <order>system.systemTime</order>
+</decoder>
+
+<decoder name="sysmon-linux-fields">
+    <parent>sysmon-linux</parent>
+    <regex offset="after_parent">\pData Name="CommandLine"\p(\.+)\p/Data\p</regex>
+    <order>eventData.commandLine</order>
+</decoder>
+
+
