@@ -56,7 +56,11 @@ Mind the folder structure and semantics behind:
 
 ## Usage
 
-### Testing
+### Running tests
+
+#### Using tester app
+
+This is the basic way and it is designed to run tests in an order: preflight tests first, then the others.
 
 ```shell
 usage: tester.py [-h] [--disable-builtin] [--disable-custom] [--disable-behavioral] [--verbosity {0,1,2}]
@@ -70,6 +74,12 @@ options:
   --disable-behavioral  Disable running behavioral tests. Enabled by default.
   --verbosity {0,1,2}   Set verbosity level for test output (0, 1, or 2). Default is 1.
 ```
+
+#### Using VS Code Test Explorer
+
+Navigate to `View > Testing` and explore the tests in the repository.
+
+### Writing tests
 
 All custom tests should be placed in the `src/tests/regression_tests/custom/` directory. Test files must start with `test_` to be discovered by the test runner.
 Here is a basic template for a new test file, for example `test_my_new_rule.py`:
@@ -184,9 +194,7 @@ You can find the tester logs in `/tmp/tester.log`.
 
 When you add new files, you must ensure the file permissions are set as expected. The expected permissions are `660` and owners are `wazuh:wazuh`. Hence, your user is added to the members of `wazuh` group for easier coexistence.
 
-There are unit tests for file permissions to help the user. If the tests fail, you can check for the root cause and then fix the ownership and permissions.
-
-You can use this snippet below whenever you need it for simplicity. You will need `sudo` as the parent folder ownership is set as `root:wazuh`.
+There are unit tests for file permissions to help the user. If the tests fail, you can check for the root cause and then fix the ownership and permissions. You can use this snippet below whenever you need it for simplicity. You will need `sudo` as the parent folder ownership is set as `root:wazuh`.
 
 ```shell
 decoders_dir=$(realpath ./decoders)
@@ -197,7 +205,7 @@ chown wazuh:wazuh "$decoders_dir"/*
 chmod 660 "$decoders_dir"/*
 ```
 
-These commands are already provided in the `fix_permissions.sh`.
+These commands are already provided in the `fix_permissions.sh`. **Whenever you add a new file, use `sudo ./fix_permissions.sh` to ensure correct behavior**. Otherwise, you will see prefileght checks failing.
 
 If your filesystem supports ACLs, `setfacl` is a good helper. Using the commands, you can ensure the future files will use the correct permissions. Since it is not universal, this change is optional.
 
