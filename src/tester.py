@@ -15,6 +15,7 @@ DESCRIPTION: Final[str] = f"{APP_NAME} ({APP_VERSION}) is a Wazuh rule and decod
 ENCODING: Final[str] = "utf-8"
 LOG_PATH: Final[str] = "/tmp/tester.log"
 
+
 def _failed(result: unittest.TestResult) -> bool:
     """Return True if the test result contains any errors or failures."""
     return bool(result.errors or result.failures)
@@ -48,8 +49,13 @@ def _run_suite(module: str, *, verbosity: int, failfast: bool) -> bool:
     logging.info("Test suite passed: %s", module)
     return True
 
-def run_tests(test_directory: str, pattern: str = 'test_*.py', verbosity: int = 1) -> Optional[unittest.result.TestResult]:
+
+def run_tests(
+        test_directory: str,
+        pattern: str = 'test_*.py',
+        verbosity: int = 1) -> Optional[unittest.result.TestResult]:
     """Discover and run tests in the specified directory with a given pattern."""
+
     print(f'Running {test_directory} tests...')
     loader = unittest.TestLoader()
     tests = loader.discover(test_directory, pattern=pattern)
@@ -69,7 +75,7 @@ def main(disable_preflight: bool = False,
          disable_custom: bool = False,
          disable_behavioral: bool = False,
          verbosity: int = 1,
-         failfast:bool = False) -> None:
+         failfast: bool = False) -> None:
 
     # Preflight: keep original behavior (failures are fatal immediately).
     if not disable_preflight:
@@ -102,6 +108,7 @@ def main(disable_preflight: bool = False,
         return
 
     raise Exception("Tests failed.", )
+
 
 def setup_logging() -> None:
     logging.basicConfig(
