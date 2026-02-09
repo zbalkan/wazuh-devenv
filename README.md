@@ -234,3 +234,4 @@ setfacl -d -m o::--- "$rules_dir"
 
 - [Detection-as-Code for Wazuh 4.x: A Practical Implementation Model](https://zaferbalkan.com/wazuh-devenv/) 
 - [Detection-as-Code for Wazuh 4.x: Log replay for behavioral testing](https://zaferbalkan.com/log-replay/)
+- [Detection-as-Code for Wazuh 4.x: Part 0](https://zaferbalkan.com/detection-engineering/)
