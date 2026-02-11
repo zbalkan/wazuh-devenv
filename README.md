@@ -88,6 +88,7 @@ Here is a basic template for a new test file, for example `test_my_new_rule.py`:
 import unittest
 from internal.logtest import send_log, send_multiple_logs, LogtestResponse, LogtestStatus
 
+
 class TestMyNewRule(unittest.TestCase):
 
     def test_single_log_triggers_alert(self):
@@ -95,10 +96,10 @@ class TestMyNewRule(unittest.TestCase):
         Tests if a specific log message triggers the expected rule.
         """
         # 1. Define the log message you want to test
-        log_message = "sshd: Invalid user admin from 192.168.1.100"
+        log = "sshd: Invalid user admin from 192.168.1.100"
 
         # 2. Send the log to the logtest engine
-        response: LogtestResponse = send_log(log_message)
+        response: LogtestResponse = send_log(log)
 
         # 3. Assert the results
         # Check that a rule matched
@@ -115,7 +116,7 @@ class TestMyNewRule(unittest.TestCase):
         Tests a stateful rule that requires multiple events to trigger.
         """
         # 1. Define the sequence of log messages
-        log_sequence = [
+        logs = [
             "sshd: Failed password for invalid user user1 from 1.2.3.4 port 1234 ssh2",
             "sshd: Failed password for invalid user user2 from 1.2.3.4 port 1234 ssh2",
             "sshd: Failed password for invalid user user3 from 1.2.3.4 port 1234 ssh2",
@@ -123,7 +124,7 @@ class TestMyNewRule(unittest.TestCase):
         ]
 
         # 2. Send the sequence of logs in a single session
-        responses: list[LogtestResponse] = send_multiple_logs(log_sequence)
+        responses = send_multiple_logs(logs)
 
         # 3. Assert the result of the FINAL event
         # The last response should contain the stateful alert
