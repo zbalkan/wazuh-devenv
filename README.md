@@ -6,6 +6,58 @@
 
 The project aims to create a development environment for detection engineers using Wazuh. While it is designed to utilize a `wazuh-manager` installed on WSL to allow testing custom rules locally before moving to production, it is possible to use a Linux VM for development as well. There is no WSL-specific configuration but no guarantees for the future.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    %% =========================
+    %% WINDOWS HOST (TOP LEVEL)
+    %% =========================
+    subgraph WIN["Windows Host"]
+        direction TB
+
+        VSCode
+
+        %% =========================
+        %% WSL INSIDE WINDOWS
+        %% =========================
+        subgraph WSL["WSL - Ubuntu"]
+            direction LR
+
+            subgraph WAZUH["Wazuh Manager"]
+                direction TB
+                MANAGER["Wazuh Manager"]
+                OSSEC_RULES["/var/ossec/etc/rules/"]
+                OSSEC_DECODERS["/var/ossec/etc/decoders/"]
+            end
+
+            subgraph PROJECT["wazuh-devenv"]
+                direction TB
+                RULES["./rules/"]
+                DECODERS["./decoders/"]
+                PYTEST["./src/tests"]
+            end
+        end
+    end
+
+    %% =========================
+    %% DEV WORKFLOW
+    %% =========================
+    VSCode -->|Opens project| PROJECT
+
+    %% =========================
+    %% FILE SYSTEM MAPPING
+    %% =========================
+    RULES -->|fstab bind mount| OSSEC_RULES
+    DECODERS -->|fstab bind mount| OSSEC_DECODERS
+
+    %% =========================
+    %% TEST EXECUTION FLOW
+    %% =========================
+    PYTEST -->|Send sample logs| MANAGER
+    MANAGER -->|Alerts / Matches| PYTEST
+```
+
 ## Installation
 
 ### For WSL
