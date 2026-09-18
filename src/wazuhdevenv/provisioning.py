@@ -119,6 +119,17 @@ class PackageManager:
             privileged=True,
         )
 
+    def ensure_system_dependencies(self) -> None:
+        if self.family == "apt":
+            self._apt_install(
+                ["python3-venv", "util-linux", "coreutils", "findutils", "gnupg", "apt-transport-https"]
+            )
+        else:
+            self.runner.run(
+                [self.command, "-y", "install", "python3", "util-linux", "coreutils", "findutils", "gnupg2"],
+                privileged=True,
+            )
+
     def _setup_apt_repository(self) -> None:
         self._apt_install(["gnupg", "apt-transport-https"])
         keyring = Path("/usr/share/keyrings/wazuh.gpg")
@@ -330,20 +341,12 @@ def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
     runner.run([sys.executable, "-c", script, str(target), str(source)], privileged=True)
 
 
-def _mount_source(runner: CommandRunner, target: Path) -> str | None:
-    result = runner.run(["mountpoint", "-q", str(target)], check=False)
-    if result.returncode != 0:
-        return None
-
-    fstab = runner.capture(["cat", "/etc/fstab"], privileged=True)
-    for raw in fstab.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        fields = line.split()
-        if len(fields) >= 4 and fields[1] == str(target) and "bind" in fields[3].split(","):
-            return fields[0]
-    return "<unknown>"
+def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
+    if runner.run(["mountpoint", "-q", str(target)], check=False).returncode != 0:
+        return False
+    source_id = runner.capture(["stat", "-Lc", "%d:%i", str(source)], privileged=True).strip()
+    target_id = runner.capture(["stat", "-Lc", "%d:%i", str(target)], privileged=True).strip()
+    return source_id == target_id
 
 
 def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
@@ -373,15 +376,11 @@ def configure_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
         if any(ch.isspace() for ch in str(source)):
             raise ConfigurationError(f"workspace path contains whitespace and cannot be persisted safely: {source}")
 
-        existing_source = _mount_source(runner, target)
-        if existing_source:
-            try:
-                if Path(existing_source).resolve() == source:
-                    _ensure_fstab(runner, source, target)
-                    continue
-            except OSError:
-                pass
-            raise ConfigurationError(f"{target} is already mounted from {existing_source}")
+        if runner.run(["mountpoint", "-q", str(target)], check=False).returncode == 0:
+            if _same_bind_mount(runner, source, target):
+                _ensure_fstab(runner, source, target)
+                continue
+            raise ConfigurationError(f"{target} is already a mount point for different content")
 
         _adopt_existing(runner, source, target)
         runner.run(["mount", "--bind", str(source), str(target)], privileged=True)
@@ -490,6 +489,7 @@ def initialize(
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
 
+    package_manager.ensure_system_dependencies()
     prepare_workspace(workspace, user)
     ensure_workspace_venv(runner, workspace)
 
