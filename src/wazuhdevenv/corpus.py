@@ -39,7 +39,11 @@ class CorpusRelease:
 
 
 def _request(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"})
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read()
@@ -150,6 +154,8 @@ def install_release(
     _verify_checksum(archive, _request(release.checksum_url).decode("ascii", errors="strict"))
 
     staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
+    activated = False
+    had_previous = False
     try:
         _safe_extract(archive, staging)
         embedded_path = staging / "manifest.json"
@@ -166,7 +172,9 @@ def install_release(
             shutil.rmtree(previous)
         if active.exists():
             os.replace(active, previous)
+            had_previous = True
         os.replace(tests_path, active)
+        activated = True
 
         manifest_target = home / "corpus-manifest.json"
         temporary_manifest = home / ".corpus-manifest.json.tmp"
@@ -200,7 +208,9 @@ def install_release(
     except Exception:
         active = home / "tests"
         previous = home / "tests.previous"
-        if not active.exists() and previous.exists():
+        if activated and active.exists():
+            shutil.rmtree(active)
+        if had_previous and previous.exists():
             os.replace(previous, active)
         raise
     finally:
