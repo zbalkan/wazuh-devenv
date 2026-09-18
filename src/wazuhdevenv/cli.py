@@ -58,6 +58,24 @@ def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
             pass
 
 
+def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:
+    state = load_state(home)
+    workspace_value = state.get("workspace")
+    if not isinstance(workspace_value, str):
+        raise WazuhDevenvError("workspace is not initialized; run 'wazuhdevenv init' first")
+    python = Path(workspace_value) / ".venv/bin/python"
+    if not python.is_file():
+        raise WazuhDevenvError(f"workspace virtual environment is missing: {python}")
+    runner = CommandRunner(user)
+    code = "from importlib.metadata import version; print(version('wazuhtester'))"
+    try:
+        return runner.capture([str(python), "-c", code]).strip()
+    except WazuhDevenvError as exc:
+        raise WazuhDevenvError(
+            "wazuhtester is not installed in the workspace virtual environment; rerun 'wazuhdevenv init'"
+        ) from exc
+
+
 def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
     state = load_state(home)
     recorded = state.get("wazuh_version")
@@ -82,7 +100,8 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
         )
         LOG.info("Wazuh Manager ready: %s", version)
         if not args.skip_corpus:
-            corpus = update_corpus(home, version, user)
+            tester_version = _workspace_wazuhtester_version(user, home)
+            corpus = update_corpus(home, version, tester_version, user)
             LOG.info("Managed rule-test corpus ready: %s", corpus)
     return 0
 
@@ -90,11 +109,12 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
 def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     with managed_lock(home):
         version = _installed_wazuh_version(user, home)
-        release = resolve_release(version)
+        tester_version = _workspace_wazuhtester_version(user, home)
+        release = resolve_release(version, tester_version)
         if args.check:
             print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
             return 0
-        installed = update_corpus(home, version, user)
+        installed = update_corpus(home, version, tester_version, user)
         LOG.info("Managed rule-test corpus ready: %s", installed)
     return 0
 
