@@ -10,14 +10,19 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from .errors import ConfigurationError
 from .paths import InvokingUser
 
 
 def ensure_managed_home(path: Path, user: InvokingUser) -> None:
+    if path.is_symlink():
+        raise ConfigurationError(f"managed home must not be a symlink: {path}")
     path.mkdir(parents=True, exist_ok=True)
-    (path / "cache").mkdir(exist_ok=True)
-    (path / "staging").mkdir(exist_ok=True)
-    (path / "logs").mkdir(exist_ok=True)
+    for name in ("cache", "staging", "logs"):
+        child = path / name
+        if child.is_symlink():
+            raise ConfigurationError(f"managed state directory must not be a symlink: {child}")
+        child.mkdir(exist_ok=True)
     if os.geteuid() == 0 and user.uid != 0:
         for item in (path, path / "cache", path / "staging", path / "logs"):
             os.chown(item, user.uid, user.gid)
@@ -26,6 +31,8 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
 @contextmanager
 def managed_lock(path: Path) -> Iterator[None]:
     lock_path = path / "wazuhdevenv.lock"
+    if lock_path.is_symlink():
+        raise ConfigurationError(f"lock file must not be a symlink: {lock_path}")
     with lock_path.open("a+", encoding="utf-8") as stream:
         try:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -39,6 +46,8 @@ def managed_lock(path: Path) -> Iterator[None]:
 
 def load_state(path: Path) -> dict[str, object]:
     state_path = path / "state.json"
+    if state_path.is_symlink():
+        raise ConfigurationError(f"state file must not be a symlink: {state_path}")
     if not state_path.exists():
         return {"schema_version": 1}
     data = json.loads(state_path.read_text(encoding="utf-8"))
