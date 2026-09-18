@@ -113,13 +113,10 @@ class PackageManager:
         return match.group(0) if match else None
 
     def _apt_install(self, packages: list[str]) -> None:
-        env = os.environ.copy()
-        env["DEBIAN_FRONTEND"] = "noninteractive"
-        self.runner.run(["apt-get", "update"], privileged=True, env=env)
+        self.runner.run(["apt-get", "update"], privileged=True)
         self.runner.run(
-            ["apt-get", "install", "-y", "--no-install-recommends", *packages],
+            ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "--no-install-recommends", *packages],
             privileged=True,
-            env=env,
         )
 
     def _setup_apt_repository(self) -> None:
@@ -337,7 +334,16 @@ def _mount_source(runner: CommandRunner, target: Path) -> str | None:
     result = runner.run(["mountpoint", "-q", str(target)], check=False)
     if result.returncode != 0:
         return None
-    return runner.capture(["findmnt", "-n", "-o", "SOURCE", "--target", str(target)]).strip()
+
+    fstab = runner.capture(["cat", "/etc/fstab"], privileged=True)
+    for raw in fstab.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) >= 4 and fields[1] == str(target) and "bind" in fields[3].split(","):
+            return fields[0]
+    return "<unknown>"
 
 
 def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
@@ -379,7 +385,7 @@ def configure_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
 
         _adopt_existing(runner, source, target)
         runner.run(["mount", "--bind", str(source), str(target)], privileged=True)
-        if _mount_source(runner, target) is None:
+        if runner.run(["mountpoint", "-q", str(target)], check=False).returncode != 0:
             raise ConfigurationError(f"bind mount failed: {source} -> {target}")
         _ensure_fstab(runner, source, target)
 
