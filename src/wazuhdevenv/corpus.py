@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -68,7 +69,17 @@ def _asset_url(release: dict[str, object], name: str) -> str | None:
     return None
 
 
-def resolve_release(wazuh_version: str) -> CorpusRelease:
+def _matches_requirement(manifest: dict[str, object], section: str, version: str) -> bool:
+    value = manifest.get(section)
+    if not isinstance(value, dict) or not value.get("requires"):
+        return False
+    try:
+        return Version(version) in SpecifierSet(str(value["requires"]))
+    except Exception:
+        return False
+
+
+def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelease:
     try:
         releases = json.loads(_request(RELEASES_API))
     except json.JSONDecodeError as exc:
@@ -91,14 +102,11 @@ def resolve_release(wazuh_version: str) -> CorpusRelease:
             continue
         if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
             continue
-        requirement = manifest.get("wazuh")
-        if not isinstance(requirement, dict) or not requirement.get("requires"):
+        if not _matches_requirement(manifest, "wazuh", str(current)):
             continue
-        try:
-            matches = current in SpecifierSet(str(requirement["requires"]))
-        except Exception:
+        if not _matches_requirement(manifest, "python", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"):
             continue
-        if not matches:
+        if not _matches_requirement(manifest, "wazuhtester", wazuhtester_version):
             continue
 
         version = str(manifest.get("corpus_version", ""))
@@ -108,7 +116,11 @@ def resolve_release(wazuh_version: str) -> CorpusRelease:
             compatible.append(CorpusRelease(manifest, manifest_url, archive_url, checksum_url))
 
     if not compatible:
-        raise CorpusError(f"no released rule-test corpus is compatible with Wazuh {wazuh_version}")
+        raise CorpusError(
+            "no released rule-test corpus is compatible with "
+            f"Wazuh {wazuh_version}, Python {sys.version_info.major}.{sys.version_info.minor}, "
+            f"and wazuhtester {wazuhtester_version}"
+        )
     return max(compatible, key=lambda item: _release_key(item.version))
 
 
@@ -143,6 +155,7 @@ def install_release(
     release: CorpusRelease,
     wazuh_version: str,
     user: InvokingUser,
+    wazuhtester_version: str,
 ) -> None:
     cache = home / "cache"
     staging_root = home / "staging"
@@ -207,6 +220,7 @@ def install_release(
             {
                 "wazuh_version": wazuh_version,
                 "active_corpus": release.version,
+                "wazuhtester_version": wazuhtester_version,
                 "corpus_installed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
             }
         )
@@ -231,10 +245,15 @@ def install_release(
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def update_corpus(home: Path, wazuh_version: str, user: InvokingUser) -> str:
-    release = resolve_release(wazuh_version)
+def update_corpus(
+    home: Path,
+    wazuh_version: str,
+    wazuhtester_version: str,
+    user: InvokingUser,
+) -> str:
+    release = resolve_release(wazuh_version, wazuhtester_version)
     state = load_state(home)
     if state.get("active_corpus") == release.version and (home / "tests").is_dir():
         return release.version
-    install_release(home, release, wazuh_version, user)
+    install_release(home, release, wazuh_version, user, wazuhtester_version)
     return release.version
