@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import shutil
-import stat
 import sys
 import tempfile
 import time
@@ -70,6 +69,18 @@ def _write_privileged(
         )
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _privileged_exists(runner: CommandRunner, path: Path) -> bool:
+    return runner.run(["test", "-e", str(path)], privileged=True, check=False).returncode == 0
+
+
+def _rewrite_preserving_metadata(runner: CommandRunner, target: Path, content: str) -> None:
+    metadata = runner.capture(["stat", "-Lc", "%a %U %G", str(target)], privileged=True).strip().split()
+    if len(metadata) != 3:
+        raise ConfigurationError(f"cannot determine metadata for {target}")
+    mode, owner, group = metadata
+    _write_privileged(runner, target, content, mode=mode, owner=owner, group=group)
 
 
 def _download(url: str) -> Path:
@@ -288,9 +299,9 @@ def configure_ossec(runner: CommandRunner) -> None:
 
     if text != original:
         backup = OSSEC_CONF.with_name("ossec.conf.wazuhdevenv.bak")
-        if not backup.exists():
+        if not _privileged_exists(runner, backup):
             runner.run(["cp", "--preserve=mode,ownership,timestamps", str(OSSEC_CONF), str(backup)], privileged=True)
-        _write_privileged(runner, OSSEC_CONF, text, mode="0640", owner="root", group="wazuh")
+        _rewrite_preserving_metadata(runner, OSSEC_CONF, text)
 
 
 def configure_windows_rule_testing(runner: CommandRunner) -> None:
@@ -300,10 +311,10 @@ def configure_windows_rule_testing(runner: CommandRunner) -> None:
     if WINDOWS_RULE_DEFAULT not in text:
         raise ConfigurationError("rule 60000 is in an unexpected state; refusing to rewrite it")
     backup = WINDOWS_RULES.with_name(WINDOWS_RULES.name + ".wazuhdevenv.bak")
-    if not backup.exists():
+    if not _privileged_exists(runner, backup):
         runner.run(["cp", "--preserve=mode,ownership,timestamps", str(WINDOWS_RULES), str(backup)], privileged=True)
     text = text.replace(WINDOWS_RULE_DEFAULT, WINDOWS_RULE_EXPECTED, 1)
-    _write_privileged(runner, WINDOWS_RULES, text, mode="0640", owner="root", group="wazuh")
+    _rewrite_preserving_metadata(runner, WINDOWS_RULES, text)
 
 
 def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
@@ -342,7 +353,7 @@ def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
 
 
 def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
-    if runner.run(["mountpoint", "-q", str(target)], check=False).returncode != 0:
+    if runner.run(["mountpoint", "-q", str(target)], privileged=True, check=False).returncode != 0:
         return False
     source_id = runner.capture(["stat", "-Lc", "%d:%i", str(source)], privileged=True).strip()
     target_id = runner.capture(["stat", "-Lc", "%d:%i", str(target)], privileged=True).strip()
@@ -376,7 +387,7 @@ def configure_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
         if any(ch.isspace() for ch in str(source)):
             raise ConfigurationError(f"workspace path contains whitespace and cannot be persisted safely: {source}")
 
-        if runner.run(["mountpoint", "-q", str(target)], check=False).returncode == 0:
+        if runner.run(["mountpoint", "-q", str(target)], privileged=True, check=False).returncode == 0:
             if _same_bind_mount(runner, source, target):
                 _ensure_fstab(runner, source, target)
                 continue
@@ -384,7 +395,7 @@ def configure_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
 
         _adopt_existing(runner, source, target)
         runner.run(["mount", "--bind", str(source), str(target)], privileged=True)
-        if runner.run(["mountpoint", "-q", str(target)], check=False).returncode != 0:
+        if runner.run(["mountpoint", "-q", str(target)], privileged=True, check=False).returncode != 0:
             raise ConfigurationError(f"bind mount failed: {source} -> {target}")
         _ensure_fstab(runner, source, target)
 
@@ -443,14 +454,13 @@ def start_wazuh(runner: CommandRunner) -> None:
         runner.run(["service", "wazuh-manager", "restart"], privileged=True)
 
 
-def wait_for_logtest(timeout: int = 120, stable_for: int = 5) -> None:
+def wait_for_logtest(runner: CommandRunner, timeout: int = 120, stable_for: int = 5) -> None:
     stable = 0
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            ready = stat.S_ISSOCK(LOGTEST_SOCKET.stat().st_mode)
-        except FileNotFoundError:
-            ready = False
+        ready = (
+            runner.run(["test", "-S", str(LOGTEST_SOCKET)], privileged=True, check=False).returncode == 0
+        )
         if ready:
             stable += 1
             if stable >= stable_for:
@@ -503,7 +513,7 @@ def initialize(
     ensure_group_membership(runner, user)
     validate_wazuh(runner)
     start_wazuh(runner)
-    wait_for_logtest()
+    wait_for_logtest(runner)
 
     state = load_state(home)
     state.update(
