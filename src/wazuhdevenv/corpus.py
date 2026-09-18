@@ -156,6 +156,10 @@ def install_release(
     staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
     activated = False
     had_previous = False
+    manifest_activated = False
+    had_previous_manifest = False
+    manifest_target = home / "corpus-manifest.json"
+    previous_manifest = home / "corpus-manifest.previous.json"
     try:
         _safe_extract(archive, staging)
         embedded_path = staging / "manifest.json"
@@ -176,13 +180,18 @@ def install_release(
         os.replace(tests_path, active)
         activated = True
 
-        manifest_target = home / "corpus-manifest.json"
         temporary_manifest = home / ".corpus-manifest.json.tmp"
         temporary_manifest.write_text(
             json.dumps(release.manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        if previous_manifest.exists():
+            previous_manifest.unlink()
+        if manifest_target.exists():
+            os.replace(manifest_target, previous_manifest)
+            had_previous_manifest = True
         os.replace(temporary_manifest, manifest_target)
+        manifest_activated = True
 
         if os.geteuid() == 0 and user.uid != 0:
             for root, directories, files in os.walk(active):
@@ -205,6 +214,7 @@ def install_release(
 
         if previous.exists():
             shutil.rmtree(previous)
+        previous_manifest.unlink(missing_ok=True)
     except Exception:
         active = home / "tests"
         previous = home / "tests.previous"
@@ -212,6 +222,10 @@ def install_release(
             shutil.rmtree(active)
         if had_previous and previous.exists():
             os.replace(previous, active)
+        if manifest_activated and manifest_target.exists():
+            manifest_target.unlink()
+        if had_previous_manifest and previous_manifest.exists():
+            os.replace(previous_manifest, manifest_target)
         raise
     finally:
         shutil.rmtree(staging, ignore_errors=True)
