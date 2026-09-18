@@ -145,8 +145,13 @@ def _validate_member(info: zipfile.ZipInfo) -> None:
 
 def _safe_extract(archive: Path, destination: Path) -> None:
     with zipfile.ZipFile(archive) as source:
+        seen: set[PurePosixPath] = set()
         for info in source.infolist():
             _validate_member(info)
+            normalized = PurePosixPath(info.filename)
+            if normalized in seen:
+                raise CorpusError(f"duplicate archive destination: {info.filename}")
+            seen.add(normalized)
         source.extractall(destination)
 
 
