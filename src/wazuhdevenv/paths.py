@@ -37,7 +37,21 @@ def managed_home(user: InvokingUser) -> Path:
 
 def resolve_workspace(value: str | None) -> Path:
     path = Path(value or ".").expanduser().resolve()
-    forbidden = {Path("/"), Path("/etc"), Path("/var"), Path("/usr"), Path("/opt")}
-    if path in forbidden:
+    forbidden_roots = (
+        Path("/etc"),
+        Path("/var"),
+        Path("/usr"),
+        Path("/opt"),
+        Path("/bin"),
+        Path("/sbin"),
+        Path("/lib"),
+        Path("/lib64"),
+        Path("/boot"),
+        Path("/dev"),
+        Path("/proc"),
+        Path("/sys"),
+        Path("/run"),
+    )
+    if path == Path("/") or any(path == root or root in path.parents for root in forbidden_roots):
         raise ConfigurationError(f"refusing to use system directory as workspace: {path}")
     return path
