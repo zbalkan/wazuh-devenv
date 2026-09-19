@@ -65,6 +65,13 @@ class LocalRunner:
             Path(args[-1]).mkdir(parents=True, exist_ok=True)
         elif args[0] == "cp":
             shutil.copy2(args[-2], args[-1])
+        elif args[0] == "rm":
+            Path(args[-1]).unlink(missing_ok=True)
+        elif args[0] == "rmdir":
+            try:
+                Path(args[-1]).rmdir()
+            except OSError:
+                pass
         return SimpleNamespace(returncode=0)
 
 
