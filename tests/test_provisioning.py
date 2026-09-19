@@ -574,7 +574,6 @@ def test_initialize_rolls_back_when_state_persistence_fails(
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
     monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
     monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
-    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: None)
     monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
     monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
