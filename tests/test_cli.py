@@ -25,11 +25,11 @@ def test_update_command_passes_invoking_user_to_managed_lock(
     user = _user(tmp_path)
     home = tmp_path / "managed"
     home.mkdir()
-    lock_calls: list[tuple[Path, InvokingUser]] = []
+    lock_calls: list[Path] = []
 
     @contextmanager
-    def fake_lock(path: Path, owner: InvokingUser):
-        lock_calls.append((path, owner))
+    def fake_lock(path: Path):
+        lock_calls.append(path)
         yield
 
     release = CorpusRelease(
@@ -43,7 +43,7 @@ def test_update_command_passes_invoking_user_to_managed_lock(
         checksum_url="checksum",
     )
     resolve_calls: list[tuple[str, str]] = []
-    update_calls: list[tuple[Path, str, str, InvokingUser]] = []
+    update_calls: list[tuple[Path, str, str]] = []
 
     monkeypatch.setattr(cli, "managed_lock", fake_lock)
     monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.8")
@@ -56,19 +56,19 @@ def test_update_command_passes_invoking_user_to_managed_lock(
     monkeypatch.setattr(
         cli,
         "update_corpus",
-        lambda path, version, tester, owner: (
-            update_calls.append((path, version, tester, owner)) or "4.14.8-r1"
+        lambda path, version, tester: (
+            update_calls.append((path, version, tester)) or "4.14.8-r1"
         ),
     )
 
     assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
-    assert lock_calls == [(home, user)]
+    assert lock_calls == [home]
     if check:
         assert resolve_calls == [("4.14.8", "0.1.0rc1")]
         assert update_calls == []
     else:
         assert resolve_calls == []
-        assert update_calls == [(home, "4.14.8", "0.1.0rc1", user)]
+        assert update_calls == [(home, "4.14.8", "0.1.0rc1")]
 
 
 
@@ -81,7 +81,7 @@ def test_configure_logging_refuses_symlinked_log_file(tmp_path: Path) -> None:
     (logs / "wazuhdevenv.log").symlink_to(victim)
 
     with pytest.raises(cli.ConfigurationError, match="log file must not be a symlink"):
-        cli._configure_logging(home, _user(tmp_path), False)
+        cli._configure_logging(home, False)
 
     assert victim.read_text(encoding="utf-8") == "unchanged\n"
 
@@ -131,9 +131,8 @@ def test_init_treats_corpus_failure_as_warning(
     home.mkdir()
 
     @contextmanager
-    def fake_lock(path: Path, owner: InvokingUser):
+    def fake_lock(path: Path):
         assert path == home
-        assert owner == user
         yield
 
     monkeypatch.setattr(cli, "managed_lock", fake_lock)
