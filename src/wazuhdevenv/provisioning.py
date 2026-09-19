@@ -750,7 +750,7 @@ def configure_permissions(runner: CommandRunner, workspace: Path) -> None:
 def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> bool:
     if user.uid == 0:
         return False
-    groups = runner.capture(["id", "-nG", user.name]).split()
+    groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" in groups:
         return False
     runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
@@ -1090,6 +1090,16 @@ def initialize(
         validate_wazuh(runner)
         start_wazuh(runner)
         wait_for_logtest(runner)
+
+        state = load_state(home)
+        state.update(
+            {
+                "workspace": str(workspace),
+                "wazuh_home": str(WAZUH_HOME),
+                "wazuh_version": installed,
+            }
+        )
+        save_state(home, state, user)
     except Exception:
         _rollback_provisioning(
             runner,
@@ -1101,13 +1111,4 @@ def initialize(
         )
         raise
 
-    state = load_state(home)
-    state.update(
-        {
-            "workspace": str(workspace),
-            "wazuh_home": str(WAZUH_HOME),
-            "wazuh_version": installed,
-        }
-    )
-    save_state(home, state, user)
     return installed
