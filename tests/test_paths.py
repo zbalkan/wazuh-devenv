@@ -8,8 +8,8 @@ from wazuhdevenv.paths import InvokingUser, managed_home, resolve_workspace
 
 
 def test_workspace_is_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "a").mkdir()
     child = tmp_path / "a/../project"
-    child.parent.mkdir(parents=True)
 
     assert resolve_workspace(str(child)) == (tmp_path / "project").resolve()
 
