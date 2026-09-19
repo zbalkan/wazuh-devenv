@@ -19,7 +19,7 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
     if path.is_symlink():
         raise ConfigurationError(f"managed home must not be a symlink: {path}")
     path.mkdir(parents=True, exist_ok=True)
-    for name in ("cache", "staging", "logs"):
+    for name in ("cache", "staging", "corpora", "logs"):
         child = path / name
         if child.is_symlink():
             raise ConfigurationError(f"managed state directory must not be a symlink: {child}")
