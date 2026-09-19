@@ -310,11 +310,17 @@ def _replace_block_child(
     return text[: block_match.start()] + replacement + text[block_match.end() :]
 
 
-def configure_ossec(runner: CommandRunner) -> None:
-    original = runner.capture(["cat", str(OSSEC_CONF)], privileged=True)
+def _render_ossec_config(original: str) -> str:
     text = original
     text = _replace_simple_tag(text, "logall_json", "yes", {"yes", "no"})
-    text = _replace_block_child(text, r"<logging>.*?</logging>", "log_format", "plain,json", {"plain", "json", "plain,json"}, "logging")
+    text = _replace_block_child(
+        text,
+        r"<logging>.*?</logging>",
+        "log_format",
+        "plain,json",
+        {"plain", "json", "plain,json"},
+        "logging",
+    )
     text = _replace_block_child(
         text,
         r'<wodle\s+name=["\']syscollector["\'][^>]*>.*?</wodle>',
@@ -323,10 +329,38 @@ def configure_ossec(runner: CommandRunner) -> None:
         {"yes", "no"},
         "syscollector",
     )
-    text = _replace_block_child(text, r"<rootcheck>.*?</rootcheck>", "disabled", "yes", {"yes", "no"}, "rootcheck")
-    text = _replace_block_child(text, r"<syscheck>.*?</syscheck>", "disabled", "yes", {"yes", "no"}, "syscheck")
-    text = _replace_block_child(text, r"<sca>.*?</sca>", "enabled", "no", {"yes", "no"}, "sca")
-    text = _replace_block_child(text, r"<indexer>.*?</indexer>", "enabled", "no", {"yes", "no"}, "indexer")
+    text = _replace_block_child(
+        text,
+        r"<rootcheck>.*?</rootcheck>",
+        "disabled",
+        "yes",
+        {"yes", "no"},
+        "rootcheck",
+    )
+    text = _replace_block_child(
+        text,
+        r"<syscheck>.*?</syscheck>",
+        "disabled",
+        "yes",
+        {"yes", "no"},
+        "syscheck",
+    )
+    text = _replace_block_child(
+        text,
+        r"<sca>.*?</sca>",
+        "enabled",
+        "no",
+        {"yes", "no"},
+        "sca",
+    )
+    text = _replace_block_child(
+        text,
+        r"<indexer>.*?</indexer>",
+        "enabled",
+        "no",
+        {"yes", "no"},
+        "indexer",
+    )
     text = _replace_block_child(
         text,
         r"<vulnerability-detection>.*?</vulnerability-detection>",
@@ -335,9 +369,23 @@ def configure_ossec(runner: CommandRunner) -> None:
         {"yes", "no"},
         "vulnerability-detection",
     )
-    text = _replace_block_child(text, r"<rule_test>.*?</rule_test>", "threads", "auto", {"auto", "1", "2", "4", "8", "16"}, "rule_test")
-    text = _replace_block_child(text, r"<rule_test>.*?</rule_test>", "max_sessions", "500", set(str(i) for i in range(1, 10001)), "rule_test")
     text = _replace_block_child(
+        text,
+        r"<rule_test>.*?</rule_test>",
+        "threads",
+        "auto",
+        {"auto", "1", "2", "4", "8", "16"},
+        "rule_test",
+    )
+    text = _replace_block_child(
+        text,
+        r"<rule_test>.*?</rule_test>",
+        "max_sessions",
+        "500",
+        {str(i) for i in range(1, 10001)},
+        "rule_test",
+    )
+    return _replace_block_child(
         text,
         r"<rule_test>.*?</rule_test>",
         "session_timeout",
@@ -346,23 +394,39 @@ def configure_ossec(runner: CommandRunner) -> None:
         "rule_test",
     )
 
+
+def configure_ossec(runner: CommandRunner) -> None:
+    original = runner.capture(["cat", str(OSSEC_CONF)], privileged=True)
+    text = _render_ossec_config(original)
     if text != original:
         backup = OSSEC_CONF.with_name("ossec.conf.wazuhdevenv.bak")
         if not _privileged_exists(runner, backup):
-            runner.run(["cp", "--preserve=mode,ownership,timestamps", str(OSSEC_CONF), str(backup)], privileged=True)
+            runner.run(
+                ["cp", "--preserve=mode,ownership,timestamps", str(OSSEC_CONF), str(backup)],
+                privileged=True,
+            )
         _rewrite_preserving_metadata(runner, OSSEC_CONF, text)
 
 
-def configure_windows_rule_testing(runner: CommandRunner) -> None:
-    text = runner.capture(["cat", str(WINDOWS_RULES)], privileged=True)
+def _render_windows_rule_testing(text: str) -> str:
     if WINDOWS_RULE_EXPECTED in text:
-        return
+        return text
     if WINDOWS_RULE_DEFAULT not in text:
         raise ConfigurationError("rule 60000 is in an unexpected state; refusing to rewrite it")
+    return text.replace(WINDOWS_RULE_DEFAULT, WINDOWS_RULE_EXPECTED, 1)
+
+
+def configure_windows_rule_testing(runner: CommandRunner) -> None:
+    original = runner.capture(["cat", str(WINDOWS_RULES)], privileged=True)
+    text = _render_windows_rule_testing(original)
+    if text == original:
+        return
     backup = WINDOWS_RULES.with_name(WINDOWS_RULES.name + ".wazuhdevenv.bak")
     if not _privileged_exists(runner, backup):
-        runner.run(["cp", "--preserve=mode,ownership,timestamps", str(WINDOWS_RULES), str(backup)], privileged=True)
-    text = text.replace(WINDOWS_RULE_DEFAULT, WINDOWS_RULE_EXPECTED, 1)
+        runner.run(
+            ["cp", "--preserve=mode,ownership,timestamps", str(WINDOWS_RULES), str(backup)],
+            privileged=True,
+        )
     _rewrite_preserving_metadata(runner, WINDOWS_RULES, text)
 
 
@@ -763,13 +827,17 @@ def initialize(
     service_was_active = is_wazuh_active(runner)
     snapshot = _capture_snapshot(runner, workspace, service_was_active)
 
+    # Validate every known configuration transformation before the service is stopped.
+    _render_ossec_config(snapshot.ossec_conf)
+    _render_windows_rule_testing(snapshot.windows_rules)
+    configure_permissions(runner, workspace)
+    ensure_group_membership(runner, user)
+
     stop_wazuh(runner)
     try:
         configure_ossec(runner)
         configure_windows_rule_testing(runner)
         configure_bind_mounts(runner, workspace)
-        configure_permissions(runner, workspace)
-        ensure_group_membership(runner, user)
         validate_wazuh(runner)
         start_wazuh(runner)
         wait_for_logtest(runner)
