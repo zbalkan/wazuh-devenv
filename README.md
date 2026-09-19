@@ -48,7 +48,7 @@ An explicit workspace path is also accepted:
 wazuhdevenv init ~/projects/my-wazuh-rules
 ```
 
-`init` is an idempotent reconciliation operation. It currently performs the responsibilities previously implemented by `install.sh`:
+`init` is an idempotent reconciliation operation. A converged host does not reinstall already-present system prerequisites or require package-repository access merely to recheck them. It currently performs the responsibilities previously implemented by `install.sh`:
 
 - detects APT, DNF, or YUM;
 - installs or verifies Wazuh Manager;
@@ -61,12 +61,13 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - disables unnecessary manager modules used by the old development profile;
 - configures the Wazuh `rule_test` service for development throughput;
 - applies the known rule-60000 Windows EventChannel testing transformation;
-- adopts existing local rule/decoder files when the workspace side is empty;
+- preflights existing Wazuh rule/decoder content, ignores only known pristine Wazuh placeholders, copies non-conflicting local content into the workspace, and fails closed on genuine filename/content conflicts;
 - bind-mounts workspace rules and decoders into `/var/ossec/etc`;
 - persists the mounts in `/etc/fstab`;
 - configures ownership and permissions;
 - adds the invoking user to the `wazuh` group when required;
 - validates Wazuh configuration using Wazuh's own `-t` checks;
+- snapshots the service/configuration/mount state before stopping Wazuh and rolls those system surfaces back if provisioning fails;
 - starts the manager and waits for a stable logtest socket;
 - initializes `~/.wazuhdevenv`;
 - downloads the compatible default rule-test corpus.
@@ -82,7 +83,7 @@ It invokes `sudo` only for operations that require system privileges.
 To require an exact Wazuh version:
 
 ```bash
-wazuhdevenv init --wazuh-version 4.14.7
+wazuhdevenv init --wazuh-version 4.14.8
 ```
 
 For development before a corpus release is available:
