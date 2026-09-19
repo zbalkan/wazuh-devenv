@@ -141,3 +141,73 @@ def test_cache_archive_written_by_root_is_chowned_to_invoking_user(
 
     assert target.read_bytes() == b"archive"
     assert calls == [(target, 1234, 5678)]
+
+
+
+def test_empty_checksum_asset_raises_corpus_error(tmp_path: Path) -> None:
+    archive = tmp_path / "corpus.zip"
+    archive.write_bytes(b"content")
+
+    with pytest.raises(CorpusError, match="invalid SHA-256 checksum asset"):
+        corpus._verify_checksum(archive, "")
+
+
+class FakeResponse:
+    def __init__(self, content: bytes = b"{}") -> None:
+        self.content = content
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.content
+
+
+def test_public_asset_request_does_not_send_github_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[object] = []
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        del timeout
+        requests.append(request)
+        return FakeResponse(b"asset")
+
+    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
+
+    assert corpus._request("https://github.com/owner/repo/releases/download/v1/file.zip") == b"asset"
+    request = requests[0]
+    assert isinstance(request, corpus.urllib.request.Request)
+    assert request.get_header("Authorization") is None
+
+
+def test_authenticated_api_request_sends_github_token_only_to_api_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[object] = []
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        del timeout
+        requests.append(request)
+        return FakeResponse(b"[]")
+
+    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
+
+    assert corpus._request(
+        "https://api.github.com/repos/owner/repo/releases",
+        authenticated=True,
+    ) == b"[]"
+    request = requests[0]
+    assert isinstance(request, corpus.urllib.request.Request)
+    assert request.get_header("Authorization") == "Bearer secret-token"
+
+    with pytest.raises(CorpusError, match="restricted to api.github.com"):
+        corpus._request(
+            "https://github.com/owner/repo/releases/download/v1/file.zip",
+            authenticated=True,
+        )

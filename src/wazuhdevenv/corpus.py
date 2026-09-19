@@ -39,11 +39,15 @@ class CorpusRelease:
         return str(self.manifest["corpus_version"])
 
 
-def _request(url: str) -> bytes:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"}
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+def _request(url: str, *, authenticated: bool = False) -> bytes:
+    headers = {"User-Agent": USER_AGENT}
+    if authenticated:
+        if not url.startswith("https://api.github.com/"):
+            raise CorpusError("authenticated downloads are restricted to api.github.com")
+        headers["Accept"] = "application/vnd.github+json"
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -81,7 +85,7 @@ def _matches_requirement(manifest: dict[str, object], section: str, version: str
 
 def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelease:
     try:
-        releases = json.loads(_request(RELEASES_API))
+        releases = json.loads(_request(RELEASES_API, authenticated=True))
     except json.JSONDecodeError as exc:
         raise CorpusError("GitHub returned invalid release metadata") from exc
     if not isinstance(releases, list):
@@ -125,7 +129,10 @@ def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelea
 
 
 def _verify_checksum(archive: Path, checksum_text: str) -> None:
-    expected = checksum_text.strip().split()[0].lower()
+    fields = checksum_text.strip().split()
+    if not fields:
+        raise CorpusError("invalid SHA-256 checksum asset")
+    expected = fields[0].lower()
     if len(expected) != 64 or any(ch not in "0123456789abcdef" for ch in expected):
         raise CorpusError("invalid SHA-256 checksum asset")
     actual = hashlib.sha256(archive.read_bytes()).hexdigest()
