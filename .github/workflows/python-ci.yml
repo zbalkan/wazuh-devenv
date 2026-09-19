@@ -36,8 +36,13 @@ jobs:
           wazuhdevenv --help
           python -m wazuhdevenv --help
 
-      - name: Build wheel
+      - name: Build and smoke-test distribution
         if: matrix.python-version == '3.13'
         run: |
           python -m pip install build
           python -m build
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/wheel-smoke/bin/wazuhdevenv" --help
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m wazuhdevenv --help

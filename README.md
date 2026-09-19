@@ -18,7 +18,14 @@ The tooling is deliberately separated by responsibility:
 
 ## Installation
 
-For CLI use, install `wazuh-devenv` with an isolated application installer:
+For CLI use, install `wazuh-devenv` with an isolated application installer.
+Before the first PyPI release, install the current `main` branch directly:
+
+```bash
+pipx install "git+https://github.com/zbalkan/wazuh-devenv.git@main"
+```
+
+After the package is published to PyPI, the stable installation command will be:
 
 ```bash
 pipx install wazuh-devenv
