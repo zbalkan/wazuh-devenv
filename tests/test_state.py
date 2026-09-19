@@ -72,3 +72,17 @@ def test_root_lock_creation_chowns_open_file_to_invoking_user(
 
     assert calls
     assert calls[0][1:] == (1234, 5678)
+
+
+
+def test_save_state_rejects_unsupported_schema(tmp_path: Path) -> None:
+    from wazuhdevenv.state import save_state
+
+    with pytest.raises(ValueError, match="unsupported state schema version"):
+        save_state(
+            tmp_path,
+            {"schema_version": 2, "workspace": "/tmp/workspace"},
+            _user(tmp_path),
+        )
+
+    assert not (tmp_path / "state.json").exists()
