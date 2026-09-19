@@ -58,9 +58,13 @@ def _apt_manager(runner: object) -> PackageManager:
     return manager
 
 
-def _snapshot(active: bool = False) -> ProvisioningSnapshot:
+def _snapshot(
+    active: bool = False,
+    enabled: bool | None = None,
+) -> ProvisioningSnapshot:
     return ProvisioningSnapshot(
         service_was_active=active,
+        service_was_enabled=enabled,
         ossec_conf="original ossec",
         windows_rules="original windows",
         fstab="original fstab",
@@ -309,6 +313,7 @@ def test_initialize_checks_service_manager_before_install(
     monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: events.append("venv"))
     monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: events.append("preflight"))
     monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
     monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
     monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
@@ -357,6 +362,7 @@ def test_failed_host_configuration_uses_small_rollback_boundary(
     monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
     monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
     monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
     monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
     monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
@@ -413,3 +419,113 @@ def test_rollback_restores_only_system_state(
         provisioning.OSSEC_CONF,
         provisioning.WINDOWS_RULES,
     ]
+
+def test_rollback_restores_active_but_disabled_systemd_service(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir(parents=True)
+
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: False)
+    monkeypatch.setattr(provisioning, "_restore_text_if_changed", lambda *args: None)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+
+    provisioning._rollback_provisioning(
+        runner,
+        workspace,
+        _snapshot(active=True, enabled=False),
+    )
+
+    assert ["systemctl", "disable", "wazuh-manager"] in runner.commands
+    assert ["systemctl", "restart", "wazuh-manager"] in runner.commands
+
+
+def test_initialize_rolls_back_when_state_persistence_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            pass
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: None)
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: None)
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: None)
+    monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+    monkeypatch.setattr(
+        provisioning,
+        "save_state",
+        lambda *args: (_ for _ in ()).throw(OSError("state write failed")),
+    )
+    monkeypatch.setattr(
+        provisioning,
+        "_rollback_provisioning",
+        lambda *args: events.append("rollback"),
+    )
+
+    with pytest.raises(OSError, match="state write failed"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == ["rollback"]
+
+
+def test_initialize_rejects_malformed_state_before_host_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            events.append("dependencies")
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(
+        provisioning,
+        "load_state",
+        lambda *args: (_ for _ in ()).throw(ValueError("unsupported state file")),
+    )
+
+    with pytest.raises(ValueError, match="unsupported state file"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == []
+

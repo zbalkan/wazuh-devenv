@@ -106,6 +106,7 @@ def _download(url: str) -> Path:
 @dataclass(frozen=True)
 class ProvisioningSnapshot:
     service_was_active: bool
+    service_was_enabled: bool | None
     ossec_conf: str
     windows_rules: str
     fstab: str
@@ -634,6 +635,19 @@ def is_wazuh_active(runner: CommandRunner) -> bool:
     )
 
 
+def is_wazuh_enabled(runner: CommandRunner) -> bool | None:
+    if _service_manager() != "systemd":
+        return None
+    return (
+        runner.run(
+            ["systemctl", "is-enabled", "--quiet", "wazuh-manager"],
+            privileged=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 def stop_wazuh(runner: CommandRunner) -> bool:
     was_active = is_wazuh_active(runner)
     if not was_active:
@@ -656,12 +670,14 @@ def validate_wazuh(runner: CommandRunner) -> None:
         runner.run([executable, "-t"], privileged=True)
 
 
-def start_wazuh(runner: CommandRunner, *, enable: bool = True) -> None:
+def start_wazuh(runner: CommandRunner, *, enable: bool | None = True) -> None:
     manager = _service_manager()
     if manager == "systemd":
         runner.run(["systemctl", "daemon-reload"], privileged=True)
-        if enable:
+        if enable is True:
             runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
+        elif enable is False:
+            runner.run(["systemctl", "disable", "wazuh-manager"], privileged=True)
         runner.run(["systemctl", "restart", "wazuh-manager"], privileged=True)
     else:
         runner.run(["service", "wazuh-manager", "restart"], privileged=True)
@@ -705,6 +721,7 @@ def _capture_snapshot(
     runner: CommandRunner,
     workspace: Path,
     service_was_active: bool,
+    service_was_enabled: bool | None,
 ) -> ProvisioningSnapshot:
     preexisting_mounts: set[Path] = set()
     for name in ("rules", "decoders"):
@@ -715,6 +732,7 @@ def _capture_snapshot(
 
     return ProvisioningSnapshot(
         service_was_active=service_was_active,
+        service_was_enabled=service_was_enabled,
         ossec_conf=runner.capture(["cat", str(OSSEC_CONF)], privileged=True),
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
         fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
@@ -760,12 +778,20 @@ def _rollback_provisioning(
         except Exception as exc:
             recovery_errors.append(f"restore {path}: {exc}")
 
-    if snapshot.service_was_active:
-        try:
-            start_wazuh(runner)
+    try:
+        if snapshot.service_was_active:
+            start_wazuh(runner, enable=snapshot.service_was_enabled)
             wait_for_logtest(runner)
-        except Exception as exc:
-            recovery_errors.append(f"restart Wazuh Manager: {exc}")
+        else:
+            stop_wazuh(runner)
+            if snapshot.service_was_enabled is not None and _service_manager() == "systemd":
+                action = "enable" if snapshot.service_was_enabled else "disable"
+                runner.run(
+                    ["systemctl", action, "wazuh-manager"],
+                    privileged=True,
+                )
+    except Exception as exc:
+        recovery_errors.append(f"restore Wazuh Manager service state: {exc}")
 
     if recovery_errors:
         LOG.error(
@@ -784,6 +810,7 @@ def initialize(
     ensure_linux()
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
+    state = load_state(home)
 
     package_manager.ensure_system_dependencies()
     _service_manager()
@@ -794,11 +821,25 @@ def initialize(
 
     preflight_bind_mounts(runner, workspace)
     service_was_active = is_wazuh_active(runner)
-    snapshot = _capture_snapshot(runner, workspace, service_was_active)
+    service_was_enabled = is_wazuh_enabled(runner)
+    snapshot = _capture_snapshot(
+        runner,
+        workspace,
+        service_was_active,
+        service_was_enabled,
+    )
 
     # Refuse unexpected file structure before stopping Wazuh.
     _render_ossec_config(snapshot.ossec_conf)
     _render_windows_rule_testing(snapshot.windows_rules)
+
+    state.update(
+        {
+            "workspace": str(workspace),
+            "wazuh_home": str(WAZUH_HOME),
+            "wazuh_version": installed,
+        }
+    )
 
     try:
         ensure_group_membership(runner, user)
@@ -810,17 +851,9 @@ def initialize(
         validate_wazuh(runner)
         start_wazuh(runner)
         wait_for_logtest(runner)
+        save_state(home, state)
     except Exception:
         _rollback_provisioning(runner, workspace, snapshot)
         raise
 
-    state = load_state(home)
-    state.update(
-        {
-            "workspace": str(workspace),
-            "wazuh_home": str(WAZUH_HOME),
-            "wazuh_version": installed,
-        }
-    )
-    save_state(home, state)
     return installed
