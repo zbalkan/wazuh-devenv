@@ -289,6 +289,41 @@ def _prepare_corpus_accessors(
         raise
 
 
+def _chown_corpus_tree(root: Path, user: InvokingUser) -> None:
+    if os.geteuid() != 0 or user.uid == 0:
+        return
+
+    # The top-level directory is created by the current root process with mode
+    # 0700. Keep it root-owned until every descendant has been processed so the
+    # invoking user cannot race the ownership walk.
+    for current, directories, files in os.walk(
+        root,
+        topdown=False,
+        followlinks=False,
+    ):
+        directory = Path(current)
+        for name in files:
+            os.chown(
+                directory / name,
+                user.uid,
+                user.gid,
+                follow_symlinks=False,
+            )
+        for name in directories:
+            os.chown(
+                directory / name,
+                user.uid,
+                user.gid,
+                follow_symlinks=False,
+            )
+        os.chown(
+            directory,
+            user.uid,
+            user.gid,
+            follow_symlinks=False,
+        )
+
+
 def install_release(
     home: Path,
     release: CorpusRelease,
@@ -311,57 +346,38 @@ def install_release(
         _request(release.checksum_url).decode("ascii", errors="strict"),
     )
 
-    staging: Path | None = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
-    release_root = corpora_root / f"{release.version}-{digest[:12]}"
+    # Never reuse an existing corpus tree. Once a completed tree is handed to
+    # the invoking user it must be considered mutable and untrusted. A fresh
+    # root-owned 0700 directory gives validation and ownership transfer an
+    # attacker-inaccessible working tree.
+    release_root = Path(
+        tempfile.mkdtemp(
+            prefix=f"{release.version}-{digest[:12]}.",
+            dir=corpora_root,
+        )
+    )
     current_link = home / "current-corpus"
     old_current_target = (
         os.readlink(current_link) if current_link.is_symlink() else None
     )
     if os.path.lexists(current_link) and not current_link.is_symlink():
+        shutil.rmtree(release_root, ignore_errors=True)
         raise CorpusError(f"current corpus pointer must be a symlink: {current_link}")
 
     moved_tests: Path | None = None
     moved_manifest: Path | None = None
     pointer_swapped = False
-    release_created = False
     try:
-        assert staging is not None
-        _safe_extract(archive, staging)
-        embedded_path = staging / "manifest.json"
-        tests_path = staging / "tests"
+        _safe_extract(archive, release_root)
+        embedded_path = release_root / "manifest.json"
+        tests_path = release_root / "tests"
         if not embedded_path.is_file() or not tests_path.is_dir():
             raise CorpusError("corpus archive must contain manifest.json and tests/")
         embedded = json.loads(embedded_path.read_text(encoding="utf-8"))
         if embedded != release.manifest:
             raise CorpusError("standalone and embedded corpus manifests differ")
 
-        if os.path.lexists(release_root):
-            if release_root.is_symlink() or not release_root.is_dir():
-                raise CorpusError(f"invalid existing corpus directory: {release_root}")
-            existing_manifest = release_root / "manifest.json"
-            existing_tests = release_root / "tests"
-            try:
-                existing = json.loads(existing_manifest.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise CorpusError(
-                    f"invalid existing corpus manifest: {existing_manifest}"
-                ) from exc
-            if existing != release.manifest or not existing_tests.is_dir():
-                raise CorpusError(f"existing corpus content is inconsistent: {release_root}")
-            shutil.rmtree(staging)
-            staging = None
-        else:
-            os.replace(staging, release_root)
-            staging = None
-            release_created = True
-
-        if os.geteuid() == 0 and user.uid != 0:
-            for root, directories, files in os.walk(release_root):
-                os.chown(root, user.uid, user.gid)
-                for name in directories:
-                    os.chown(Path(root) / name, user.uid, user.gid)
-                for name in files:
-                    os.chown(Path(root) / name, user.uid, user.gid)
+        _chown_corpus_tree(release_root, user)
 
         moved_tests, moved_manifest = _prepare_corpus_accessors(home, user)
         _atomic_symlink(
@@ -399,8 +415,7 @@ def install_release(
             if moved_manifest is not None and moved_manifest.exists():
                 os.replace(moved_manifest, home / "corpus-manifest.json")
 
-        if release_created and release_root.exists():
-            shutil.rmtree(release_root, ignore_errors=True)
+        shutil.rmtree(release_root, ignore_errors=True)
         raise
     else:
         for legacy in (moved_tests, moved_manifest):
@@ -413,9 +428,6 @@ def install_release(
                     legacy.unlink()
             except OSError as exc:
                 LOG.warning("Could not remove legacy corpus backup %s: %s", legacy, exc)
-    finally:
-        if staging is not None and staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
 
 def update_corpus(
     home: Path,

@@ -393,3 +393,86 @@ def test_update_corpus_skips_install_for_active_release(
         "0.1.0rc1",
         InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
     ) == "4.14.8-r2"
+
+
+
+def test_reinstall_never_reuses_user_writable_corpus_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    for name in ("cache", "staging", "corpora"):
+        (home / name).mkdir(parents=True, exist_ok=True)
+
+    manifest = _manifest("4.14.8-r2")
+    archive_bytes = _build_archive(tmp_path, manifest, "verified\n")
+    payloads = {
+        "archive": archive_bytes,
+        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    # Simulate a previously user-writable release tree containing a malicious
+    # descendant symlink. Reinstallation must leave it entirely untouched.
+    tainted = home / "corpora/4.14.8-r2-tainted"
+    (tainted / "tests").mkdir(parents=True)
+    victim = tmp_path / "root-owned-target"
+    victim.write_text("unchanged\n", encoding="utf-8")
+    (tainted / "tests/escape").symlink_to(victim)
+
+    chowned: list[Path] = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        os,
+        "chown",
+        lambda path, uid, gid, **kwargs: chowned.append(Path(path)),
+    )
+    monkeypatch.setattr(os, "lchown", lambda *args, **kwargs: None)
+
+    release = CorpusRelease(manifest, "manifest", "archive", "checksum")
+    user = InvokingUser("test", 1234, 5678, tmp_path)
+
+    corpus.install_release(home, release, "4.14.8", user, "0.1.0rc1")
+
+    active = (home / "current-corpus").resolve()
+    assert active != tainted
+    assert active.parent == home / "corpora"
+    assert victim.read_text(encoding="utf-8") == "unchanged\n"
+    assert all(tainted not in path.parents and path != tainted for path in chowned)
+
+
+def test_chown_corpus_tree_never_follows_symlinks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "release"
+    tests = root / "tests"
+    tests.mkdir(parents=True)
+    victim = tmp_path / "victim"
+    victim.write_text("unchanged\n", encoding="utf-8")
+    link = tests / "escape"
+    link.symlink_to(victim)
+
+    calls: list[tuple[Path, bool | None]] = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+
+    def fake_chown(
+        path: object,
+        uid: int,
+        gid: int,
+        *,
+        follow_symlinks: bool = True,
+    ) -> None:
+        del uid, gid
+        calls.append((Path(path), follow_symlinks))
+
+    monkeypatch.setattr(os, "chown", fake_chown)
+
+    corpus._chown_corpus_tree(
+        root,
+        InvokingUser("test", 1234, 5678, tmp_path),
+    )
+
+    link_calls = [follow for path, follow in calls if path == link]
+    assert link_calls == [False]
+    assert victim.read_text(encoding="utf-8") == "unchanged\n"
