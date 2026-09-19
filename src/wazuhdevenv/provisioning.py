@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import re
@@ -431,7 +430,11 @@ def configure_windows_rule_testing(runner: CommandRunner) -> None:
 
 
 def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
+    created_workspace = not workspace.exists()
     workspace.mkdir(parents=True, exist_ok=True)
+    if created_workspace and os.geteuid() == 0 and user.uid != 0:
+        os.chown(workspace, user.uid, user.gid)
+
     for name in ("rules", "decoders", "tests"):
         path = workspace / name
         if path.is_symlink():
@@ -441,32 +444,24 @@ def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
             os.chown(path, user.uid, user.gid)
 
 
-def _local_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _target_entries(runner: CommandRunner, target: Path) -> list[tuple[str, str]]:
+def _tree_entries(runner: CommandRunner, path: Path) -> dict[str, str]:
     output = runner.capture(
-        ["find", str(target), "-mindepth", "1", "-printf", "%y\t%P\n"],
+        ["find", str(path), "-mindepth", "1", "-printf", "%y\t%P\n"],
         privileged=True,
     )
-    entries: list[tuple[str, str]] = []
+    entries: dict[str, str] = {}
     for line in output.splitlines():
         if not line:
             continue
         try:
             kind, relative = line.split("\t", 1)
         except ValueError as exc:
-            raise ConfigurationError(f"cannot inspect existing Wazuh content under {target}") from exc
-        entries.append((kind, relative))
+            raise ConfigurationError(f"cannot inspect filesystem content under {path}") from exc
+        entries[relative] = kind
     return entries
 
 
-def _target_sha256(runner: CommandRunner, path: Path) -> str:
+def _path_sha256(runner: CommandRunner, path: Path) -> str:
     output = runner.capture(["sha256sum", str(path)], privileged=True).strip()
     digest = output.split(maxsplit=1)[0] if output else ""
     if not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
@@ -480,21 +475,29 @@ def _is_stock_placeholder(target: Path, relative: str, digest: str) -> bool:
 
 
 def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
-    target_entries = _target_entries(runner, target)
+    target_entries = _tree_entries(runner, target)
     if not target_entries:
         return
 
-    for entry in source.rglob("*"):
-        if entry.is_symlink():
-            raise ConfigurationError(f"workspace content must not contain symlinks: {entry}")
+    source_entries = _tree_entries(runner, source)
+    for relative, kind in source_entries.items():
+        if kind == "l":
+            raise ConfigurationError(
+                f"workspace content must not contain symlinks: {source / relative}"
+            )
+        if kind not in {"d", "f"}:
+            raise ConfigurationError(
+                f"unsupported workspace content under {source}: {relative}"
+            )
 
     copies: list[tuple[Path, Path]] = []
-    for kind, relative in target_entries:
+    for relative, kind in target_entries.items():
         target_entry = target / relative
         source_entry = source / relative
+        source_kind = source_entries.get(relative)
 
         if kind == "d":
-            if source_entry.exists() and not source_entry.is_dir():
+            if source_kind is not None and source_kind != "d":
                 raise ConfigurationError(
                     f"cannot adopt {target_entry}: workspace path is not a directory"
                 )
@@ -504,15 +507,15 @@ def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
                 f"unsupported existing Wazuh content under {target}: {relative}"
             )
 
-        target_digest = _target_sha256(runner, target_entry)
+        target_digest = _path_sha256(runner, target_entry)
         stock_placeholder = _is_stock_placeholder(target, relative, target_digest)
 
-        if source_entry.exists():
-            if source_entry.is_symlink() or not source_entry.is_file():
+        if source_kind is not None:
+            if source_kind != "f":
                 raise ConfigurationError(
                     f"cannot adopt {target_entry}: workspace path is not a regular file"
                 )
-            source_digest = _local_sha256(source_entry)
+            source_digest = _path_sha256(runner, source_entry)
             if source_digest == target_digest or stock_placeholder:
                 continue
             raise ConfigurationError(
@@ -522,13 +525,15 @@ def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
         if stock_placeholder:
             continue
 
-        for parent in source_entry.parents:
-            if parent == source:
-                break
-            if parent.exists() and not parent.is_dir():
+        parent = Path(relative).parent
+        while parent != Path("."):
+            parent_kind = source_entries.get(parent.as_posix())
+            if parent_kind is not None and parent_kind != "d":
                 raise ConfigurationError(
                     f"cannot adopt {target_entry}: workspace parent is not a directory"
                 )
+            parent = parent.parent
+
         copies.append((target_entry, source_entry))
 
     for target_entry, source_entry in copies:

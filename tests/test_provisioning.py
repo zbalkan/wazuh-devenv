@@ -23,9 +23,11 @@ from wazuhdevenv.provisioning import (
 class LocalRunner:
     def __init__(self) -> None:
         self.commands: list[list[str]] = []
+        self.privileged_captures: list[list[str]] = []
 
     def capture(self, args: list[str], *, privileged: bool = False) -> str:
-        del privileged
+        if privileged:
+            self.privileged_captures.append(args)
         if args[0] == "find":
             root = Path(args[1])
             rows: list[str] = []
@@ -267,3 +269,45 @@ def test_initialize_rolls_back_after_post_stop_failure(
 
     assert events[-2:] == ["validate", "rollback"]
     assert "stop" in events
+
+
+
+def test_adoption_inspects_workspace_through_privileged_runner(tmp_path: Path) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    target = tmp_path / "wazuh/rules"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (source / "custom.xml").write_text("same\n", encoding="utf-8")
+    (target / "custom.xml").write_text("same\n", encoding="utf-8")
+
+    _adopt_existing(runner, source, target)
+
+    source_commands = [
+        command
+        for command in runner.privileged_captures
+        if str(source) in command
+    ]
+    assert source_commands
+    assert any(command[0] == "find" for command in source_commands)
+    assert any(command[0] == "sha256sum" for command in source_commands)
+
+
+def test_prepare_workspace_chowns_new_root_when_invoked_as_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "new-workspace"
+    user = InvokingUser("test", 1234, 5678, tmp_path)
+    calls: list[tuple[Path, int, int]] = []
+
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        os,
+        "chown",
+        lambda path, uid, gid: calls.append((Path(path), uid, gid)),
+    )
+
+    provisioning.prepare_workspace(workspace, user)
+
+    assert (workspace, 1234, 5678) in calls
