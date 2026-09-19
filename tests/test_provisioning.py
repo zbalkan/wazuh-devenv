@@ -450,3 +450,103 @@ def test_restore_workspace_removes_adopted_files_and_restores_metadata(
     assert not copied.exists()
     assert any(command[0] == "chown" for command in runner.commands)
     assert any(command[0] == "chmod" for command in runner.commands)
+
+
+
+@pytest.mark.parametrize(
+    "threads",
+    ["1", "32", "128", "auto"],
+)
+def test_render_ossec_accepts_documented_rule_test_threads(threads: str) -> None:
+    assert provisioning._valid_rule_test_threads(threads)
+
+
+@pytest.mark.parametrize("threads", ["0", "129", "four"])
+def test_render_ossec_rejects_invalid_rule_test_threads(threads: str) -> None:
+    assert not provisioning._valid_rule_test_threads(threads)
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    ["30s", "1m", "24h", "365d"],
+)
+def test_render_ossec_accepts_documented_session_timeout(timeout: str) -> None:
+    assert provisioning._valid_rule_test_session_timeout(timeout)
+
+
+@pytest.mark.parametrize("timeout", ["0s", "366d", "1h 30m", "forever"])
+def test_render_ossec_rejects_invalid_session_timeout(timeout: str) -> None:
+    assert not provisioning._valid_rule_test_session_timeout(timeout)
+
+
+def test_empty_target_still_rejects_workspace_symlink(tmp_path: Path) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    target = tmp_path / "wazuh/rules"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.write_text("x", encoding="utf-8")
+    (source / "link.xml").symlink_to(outside)
+
+    with pytest.raises(ConfigurationError, match="must not contain symlinks"):
+        _plan_adoption(runner, source, target)
+
+
+def test_ensure_group_membership_reports_whether_it_mutated() -> None:
+    class GroupRunner:
+        def __init__(self, groups: str) -> None:
+            self.groups = groups
+            self.commands: list[list[str]] = []
+
+        def capture(self, args: list[str], **kwargs: object) -> str:
+            return self.groups
+
+        def run(self, args: list[str], **kwargs: object) -> SimpleNamespace:
+            self.commands.append(args)
+            return SimpleNamespace(returncode=0)
+
+    user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
+    existing = GroupRunner("tester wazuh")
+    added = GroupRunner("tester")
+
+    assert provisioning.ensure_group_membership(existing, user) is False
+    assert provisioning.ensure_group_membership(added, user) is True
+    assert added.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
+
+
+def test_rollback_stops_manager_that_was_initially_inactive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", 1000, 1000, tmp_path)
+    snapshot = ProvisioningSnapshot(
+        service_was_active=False,
+        ossec_conf="original",
+        windows_rules="original",
+        fstab="original",
+        preexisting_mounts=frozenset(),
+        service_was_enabled=False,
+        workspace_metadata=(),
+    )
+
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda runner: events.append("stop") or True)
+    monkeypatch.setattr(provisioning, "_restore_workspace", lambda *args: [])
+    monkeypatch.setattr(provisioning, "_restore_text_if_changed", lambda *args: None)
+    monkeypatch.setattr(provisioning, "set_wazuh_enabled", lambda runner, value: events.append(f"enabled:{value}"))
+    monkeypatch.setattr(provisioning, "remove_group_membership", lambda *args: events.append("group-removed"))
+
+    provisioning._rollback_provisioning(
+        object(),
+        tmp_path / "workspace",
+        snapshot,
+        WorkspaceMutations(),
+        user,
+        True,
+    )
+
+    assert events[0] == "stop"
+    assert "enabled:False" in events
+    assert "group-removed" in events
+    assert not any(event == "start" for event in events)
