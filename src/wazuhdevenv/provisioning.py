@@ -127,14 +127,37 @@ class PackageManager:
         else:
             raise UnsupportedPlatformError("supported package manager not found (APT, DNF, or YUM)")
 
-    def installed_version(self) -> str | None:
+    def _apt_package_version(self, package: str) -> str | None:
         try:
-            if self.family == "apt":
-                raw = self.runner.capture(["dpkg-query", "-W", "-f=${Version}", "wazuh-manager"])
-            else:
-                raw = self.runner.capture(["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "wazuh-manager"])
+            raw = self.runner.capture(
+                [
+                    "dpkg-query",
+                    "-W",
+                    "-f=${Status}\t${Version}\n",
+                    package,
+                ]
+            )
         except CommandError:
             return None
+
+        status, separator, version = raw.rstrip("\n").partition("\t")
+        if status != "install ok installed" or not separator:
+            return None
+        version = version.strip()
+        return version or None
+
+    def installed_version(self) -> str | None:
+        if self.family == "apt":
+            raw = self._apt_package_version("wazuh-manager")
+            if raw is None:
+                return None
+        else:
+            try:
+                raw = self.runner.capture(
+                    ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "wazuh-manager"]
+                )
+            except CommandError:
+                return None
         return _normalize_wazuh_version(raw)
 
     def _apt_install(self, packages: list[str]) -> None:
@@ -157,11 +180,7 @@ class PackageManager:
             missing = [
                 package
                 for package in packages
-                if self.runner.run(
-                    ["dpkg-query", "-W", package],
-                    check=False,
-                ).returncode
-                != 0
+                if self._apt_package_version(package) is None
             ]
             if missing:
                 self._apt_install(missing)

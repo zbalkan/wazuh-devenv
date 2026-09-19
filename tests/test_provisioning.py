@@ -12,6 +12,7 @@ import wazuhdevenv.provisioning as provisioning
 from wazuhdevenv.errors import ConfigurationError
 from wazuhdevenv.paths import InvokingUser
 from wazuhdevenv.provisioning import (
+    PackageManager,
     ProvisioningSnapshot,
     _adopt_existing,
     _normalize_wazuh_version,
@@ -311,3 +312,69 @@ def test_prepare_workspace_chowns_new_root_when_invoked_as_root(
     provisioning.prepare_workspace(workspace, user)
 
     assert (workspace, 1234, 5678) in calls
+
+
+
+class DpkgRunner:
+    def __init__(self, states: dict[str, str]) -> None:
+        self.states = states
+
+    def capture(self, args: list[str], *, privileged: bool = False) -> str:
+        del privileged
+        if args[:2] != ["dpkg-query", "-W"]:
+            raise AssertionError(f"unexpected command: {args}")
+        package = args[-1]
+        value = self.states.get(package)
+        if value is None:
+            raise provisioning.CommandError(f"package not found: {package}")
+        return value
+
+
+def _apt_manager(runner: object) -> PackageManager:
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    manager.family = "apt"
+    manager.command = "apt-get"
+    return manager
+
+
+def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
+    manager = _apt_manager(
+        DpkgRunner(
+            {
+                "wazuh-manager": "deinstall ok config-files\t4.14.8-1\n",
+            }
+        )
+    )
+
+    assert manager.installed_version() is None
+
+
+def test_installed_apt_wazuh_package_returns_normalized_version() -> None:
+    manager = _apt_manager(
+        DpkgRunner(
+            {
+                "wazuh-manager": "install ok installed\t4.14.8-1\n",
+            }
+        )
+    )
+
+    assert manager.installed_version() == "4.14.8"
+
+
+def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
+    states = {
+        "python3-venv": "deinstall ok config-files\t3.13.0-1\n",
+        "util-linux": "install ok installed\t2.40.0\n",
+        "coreutils": "install ok installed\t9.5\n",
+        "findutils": "install ok installed\t4.10\n",
+        "gnupg": "install ok installed\t2.4\n",
+        "apt-transport-https": "install ok installed\t2.9\n",
+    }
+    manager = _apt_manager(DpkgRunner(states))
+    installed: list[list[str]] = []
+    manager._apt_install = lambda packages: installed.append(packages)  # type: ignore[method-assign]
+
+    manager.ensure_system_dependencies()
+
+    assert installed == [["python3-venv"]]
