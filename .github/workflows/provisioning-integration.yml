@@ -16,7 +16,8 @@ jobs:
   init-idempotence:
     runs-on: ubuntu-latest
     env:
-      WAZUHTESTER_SPEC: "wazuhtester @ git+https://github.com/zbalkan/wazuhtester@main"
+      WAZUHTESTER_SPEC: "wazuhtester==0.1.0rc1"
+      WAZUH_VERSION: ${{ inputs.wazuh_version }}
 
     steps:
       - name: Configure temporary paths
@@ -37,7 +38,7 @@ jobs:
 
       - name: First init
         run: |
-          wazuhdevenv init "$WORKSPACE" --wazuh-version "${{ inputs.wazuh_version }}" --skip-corpus
+          wazuhdevenv init "$WORKSPACE" --wazuh-version "$WAZUH_VERSION" --skip-corpus
 
       - name: Verify provisioned environment
         run: |
@@ -67,5 +68,6 @@ jobs:
         run: |
           sudo systemctl status wazuh-manager --no-pager || true
           sudo journalctl -u wazuh-manager --no-pager -n 150 || true
-          sudo findmnt /var/ossec/etc/rules /var/ossec/etc/decoders || true
+          sudo findmnt /var/ossec/etc/rules || true
+          sudo findmnt /var/ossec/etc/decoders || true
           cat "$WAZUHDEVENV_HOME/state.json" || true
