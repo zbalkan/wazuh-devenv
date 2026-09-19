@@ -80,3 +80,16 @@ def test_invoking_user_uses_current_uid(
     monkeypatch.setattr("wazuhdevenv.paths.pwd.getpwuid", lambda uid: Entry())
 
     assert InvokingUser.current() == InvokingUser("tester", 1000, 1000, tmp_path)
+
+
+def test_unknown_invoking_user_is_reported_as_configuration_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(os, "getuid", lambda: 424242)
+    monkeypatch.setattr(
+        "wazuhdevenv.paths.pwd.getpwuid",
+        lambda uid: (_ for _ in ()).throw(KeyError(uid)),
+    )
+
+    with pytest.raises(ConfigurationError, match="invoking user does not exist: 424242"):
+        InvokingUser.current()

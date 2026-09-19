@@ -17,7 +17,7 @@ def _user(tmp_path: Path) -> InvokingUser:
 
 
 @pytest.mark.parametrize("check", [False, True])
-def test_update_command_passes_invoking_user_to_managed_lock(
+def test_update_command_uses_managed_lock_with_home_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     check: bool,
