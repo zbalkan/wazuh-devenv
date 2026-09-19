@@ -118,3 +118,51 @@ def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
     assert cli._workspace_wazuhtester_version(invoking_user, home) == "0.1.0rc1"
     assert users == [invoking_user]
     assert calls and calls[0][0] == str(python)
+
+
+
+def test_init_treats_corpus_failure_as_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    user = _user(tmp_path)
+    home = tmp_path / "managed"
+    home.mkdir()
+
+    @contextmanager
+    def fake_lock(path: Path, owner: InvokingUser):
+        assert path == home
+        assert owner == user
+        yield
+
+    monkeypatch.setattr(cli, "managed_lock", fake_lock)
+    monkeypatch.setattr(cli, "resolve_workspace", lambda value: tmp_path / "workspace")
+    monkeypatch.setattr(cli, "initialize", lambda *args, **kwargs: "4.14.8")
+    monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
+
+    def fail_corpus(*args: object, **kwargs: object) -> str:
+        raise cli.CorpusError("release unavailable")
+
+    monkeypatch.setattr(cli, "update_corpus", fail_corpus)
+    caplog.set_level("WARNING")
+
+    result = cli._init_command(
+        argparse.Namespace(path=None, wazuh_version=None, skip_corpus=False),
+        user,
+        home,
+    )
+
+    assert result == 0
+    assert "Wazuh is ready" in caplog.text
+    assert "wazuhdevenv update" in caplog.text
+
+
+def test_main_rejects_direct_root_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 0)
+
+    assert cli.main(["update"]) == 1
+    assert "run wazuhdevenv as the developer, not as root" in capsys.readouterr().err
