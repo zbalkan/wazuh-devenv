@@ -125,41 +125,55 @@ def test_normalize_wazuh_version_rejects_invalid_value() -> None:
         _normalize_wazuh_version("not-a-version")
 
 
-def test_stock_placeholder_does_not_override_workspace_rule(tmp_path: Path) -> None:
+def test_wazuh_local_rules_sample_is_never_adopted(tmp_path: Path) -> None:
     runner = LocalRunner()
     source = tmp_path / "workspace/rules"
     target = tmp_path / "wazuh/rules"
     source.mkdir(parents=True)
     target.mkdir(parents=True)
-
-    (source / "local_rules.xml").write_text("<group name=\"custom,\"/>\n", encoding="utf-8")
     (target / "local_rules.xml").write_text(
-        """<!-- Local rules -->
-
-<!-- Modify it at your will. -->
-<!-- Copyright (C) 2015, Wazuh Inc. -->
-
-<!-- Example -->
-<group name="local,syslog,sshd,">
-
-  <!--
-  Dec 10 01:02:02 host sshd[1234]: Failed none for root from 1.1.1.1 port 1066 ssh2
-  -->
-  <rule id="100001" level="5">
-    <if_sid>5716</if_sid>
-    <srcip>1.1.1.1</srcip>
-    <description>sshd: authentication failed from IP 1.1.1.1.</description>
-    <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
-  </rule>
-
-</group>
-""",
+        "arbitrary upstream sample content\n",
         encoding="utf-8",
     )
 
     _adopt_existing(runner, source, target)
 
-    assert (source / "local_rules.xml").read_text(encoding="utf-8") == '<group name="custom,"/>\n'
+    assert not (source / "local_rules.xml").exists()
+    assert not any(command[0] == "cp" for command in runner.commands)
+
+
+def test_workspace_local_rules_always_wins_over_wazuh_sample(tmp_path: Path) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    target = tmp_path / "wazuh/rules"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (source / "local_rules.xml").write_text("workspace rule\n", encoding="utf-8")
+    (target / "local_rules.xml").write_text(
+        "different upstream sample\n",
+        encoding="utf-8",
+    )
+
+    _adopt_existing(runner, source, target)
+
+    assert (source / "local_rules.xml").read_text(encoding="utf-8") == "workspace rule\n"
+    assert not any(command[0] == "cp" for command in runner.commands)
+
+
+def test_wazuh_local_decoder_sample_is_never_adopted(tmp_path: Path) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/decoders"
+    target = tmp_path / "wazuh/decoders"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (target / "local_decoder.xml").write_text(
+        "arbitrary upstream decoder sample\n",
+        encoding="utf-8",
+    )
+
+    _adopt_existing(runner, source, target)
+
+    assert not (source / "local_decoder.xml").exists()
     assert not any(command[0] == "cp" for command in runner.commands)
 
 
@@ -407,28 +421,6 @@ def test_adoption_plan_does_not_mutate_workspace(tmp_path: Path) -> None:
 
     assert len(plan.copies) == 1
     assert not (source / "custom.xml").exists()
-    assert not any(command[0] == "cp" for command in runner.commands)
-
-
-def test_prefer_workspace_local_allows_changed_local_rules_placeholder(
-    tmp_path: Path,
-) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (source / "local_rules.xml").write_text("workspace\n", encoding="utf-8")
-    (target / "local_rules.xml").write_text("new upstream placeholder\n", encoding="utf-8")
-
-    _adopt_existing(
-        runner,
-        source,
-        target,
-        prefer_workspace_local=True,
-    )
-
-    assert (source / "local_rules.xml").read_text(encoding="utf-8") == "workspace\n"
     assert not any(command[0] == "cp" for command in runner.commands)
 
 

@@ -25,9 +25,9 @@ OSSEC_CONF = WAZUH_HOME / "etc/ossec.conf"
 WINDOWS_RULES = WAZUH_HOME / "ruleset/rules/0575-win-base_rules.xml"
 LOGTEST_SOCKET = WAZUH_HOME / "queue/sockets/logtest"
 
-STOCK_PLACEHOLDER_SHA256 = {
-    ("rules", "local_rules.xml"): "991dc926bd2e3aec88bd79be1c8b458777f64f489b3e6524e682ac33620425f4",
-    ("decoders", "local_decoder.xml"): "21f5e1ff2ea096f2b1b6acdc1fc25bcac46734614b253f6ad1352d9c2a1c5c13",
+DISPOSABLE_WAZUH_SAMPLES = {
+    ("rules", "local_rules.xml"),
+    ("decoders", "local_decoder.xml"),
 }
 
 WINDOWS_RULE_DEFAULT = """  <rule id="60000" level="0">
@@ -509,17 +509,10 @@ def _path_sha256(runner: CommandRunner, path: Path) -> str:
     return digest.lower()
 
 
-def _is_stock_placeholder(target: Path, relative: str, digest: str) -> bool:
-    expected = STOCK_PLACEHOLDER_SHA256.get((target.name, relative))
-    return expected == digest
-
-
 def _plan_adoption(
     runner: CommandRunner,
     source: Path,
     target: Path,
-    *,
-    prefer_workspace_local: bool = False,
 ) -> AdoptionPlan:
     target_entries = _tree_entries(runner, target)
     if not target_entries:
@@ -542,6 +535,9 @@ def _plan_adoption(
         source_entry = source / relative
         source_kind = source_entries.get(relative)
 
+        if (target.name, relative) in DISPOSABLE_WAZUH_SAMPLES:
+            continue
+
         if kind == "d":
             if source_kind is not None and source_kind != "d":
                 raise ConfigurationError(
@@ -554,7 +550,6 @@ def _plan_adoption(
             )
 
         target_digest = _path_sha256(runner, target_entry)
-        stock_placeholder = _is_stock_placeholder(target, relative, target_digest)
 
         if source_kind is not None:
             if source_kind != "f":
@@ -562,22 +557,11 @@ def _plan_adoption(
                     f"cannot adopt {target_entry}: workspace path is not a regular file"
                 )
             source_digest = _path_sha256(runner, source_entry)
-            local_override = (
-                prefer_workspace_local
-                and (target.name, relative)
-                in {
-                    ("rules", "local_rules.xml"),
-                    ("decoders", "local_decoder.xml"),
-                }
-            )
-            if source_digest == target_digest or stock_placeholder or local_override:
+            if source_digest == target_digest:
                 continue
             raise ConfigurationError(
                 f"conflicting existing Wazuh content: {target_entry} and {source_entry}"
             )
-
-        if stock_placeholder:
-            continue
 
         parent = Path(relative).parent
         while parent != Path("."):
@@ -629,15 +613,9 @@ def _adopt_existing(
     source: Path,
     target: Path,
     *,
-    prefer_workspace_local: bool = False,
     mutations: WorkspaceMutations | None = None,
 ) -> None:
-    plan = _plan_adoption(
-        runner,
-        source,
-        target,
-        prefer_workspace_local=prefer_workspace_local,
-    )
+    plan = _plan_adoption(runner, source, target)
     _apply_adoption(runner, plan, mutations)
 
 
@@ -679,8 +657,6 @@ def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
 def preflight_bind_mounts(
     runner: CommandRunner,
     workspace: Path,
-    *,
-    prefer_workspace_local: bool = False,
 ) -> None:
     for name in ("rules", "decoders"):
         source = (workspace / name).resolve()
@@ -704,12 +680,7 @@ def preflight_bind_mounts(
                     f"{target} is already a mount point for different content"
                 )
         else:
-            _plan_adoption(
-                runner,
-                source,
-                target,
-                prefer_workspace_local=prefer_workspace_local,
-            )
+            _plan_adoption(runner, source, target)
 
         _fstab_has_entry(runner, source, target)
 
@@ -718,7 +689,6 @@ def configure_bind_mounts(
     runner: CommandRunner,
     workspace: Path,
     *,
-    prefer_workspace_local: bool = False,
     mutations: WorkspaceMutations | None = None,
 ) -> None:
     for name in ("rules", "decoders"):
@@ -737,7 +707,6 @@ def configure_bind_mounts(
             runner,
             source,
             target,
-            prefer_workspace_local=prefer_workspace_local,
             mutations=mutations,
         )
         runner.run(["mount", "--bind", str(source), str(target)], privileged=True)
@@ -1009,7 +978,6 @@ def initialize(
     user: InvokingUser,
     *,
     wazuh_version: str | None = None,
-    prefer_workspace_local: bool = False,
 ) -> str:
     ensure_linux()
     runner = CommandRunner(user)
@@ -1021,11 +989,7 @@ def initialize(
 
     installed = package_manager.install_wazuh(wazuh_version)
 
-    preflight_bind_mounts(
-        runner,
-        workspace,
-        prefer_workspace_local=prefer_workspace_local,
-    )
+    preflight_bind_mounts(runner, workspace)
     service_was_active = is_wazuh_active(runner)
     snapshot = _capture_snapshot(runner, workspace, service_was_active)
 
@@ -1042,7 +1006,6 @@ def initialize(
         configure_bind_mounts(
             runner,
             workspace,
-            prefer_workspace_local=prefer_workspace_local,
             mutations=mutations,
         )
         configure_permissions(runner, workspace)
