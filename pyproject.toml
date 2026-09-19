@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wazuh-devenv"
+version = "0.4.0.dev0"
+description = "Provision and operate a local Wazuh rule and decoder development environment"
+readme = "README.md"
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [
+  { name = "Zafer Balkan", email = "zafer@zaferbalkan.com" },
+]
+keywords = ["wazuh", "detection-engineering", "pytest", "security", "development"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "packaging>=24,<26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+]
+
+[project.scripts]
+wazuhdevenv = "wazuhdevenv.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/zbalkan/wazuh-devenv"
+Repository = "https://github.com/zbalkan/wazuh-devenv"
+Issues = "https://github.com/zbalkan/wazuh-devenv/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["wazuhdevenv*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
