@@ -531,14 +531,16 @@ def test_rollback_stops_manager_that_was_initially_inactive(
         workspace_metadata=(),
     )
 
+    runner = LocalRunner()
     monkeypatch.setattr(provisioning, "stop_wazuh", lambda runner: events.append("stop") or True)
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: True)
     monkeypatch.setattr(provisioning, "_restore_workspace", lambda *args: [])
     monkeypatch.setattr(provisioning, "_restore_text_if_changed", lambda *args: None)
     monkeypatch.setattr(provisioning, "set_wazuh_enabled", lambda runner, value: events.append(f"enabled:{value}"))
     monkeypatch.setattr(provisioning, "remove_group_membership", lambda *args: events.append("group-removed"))
 
     provisioning._rollback_provisioning(
-        object(),
+        runner,
         tmp_path / "workspace",
         snapshot,
         WorkspaceMutations(),
@@ -550,6 +552,8 @@ def test_rollback_stops_manager_that_was_initially_inactive(
     assert "enabled:False" in events
     assert "group-removed" in events
     assert not any(event == "start" for event in events)
+    assert ["umount", "/var/ossec/etc/decoders"] in runner.commands
+    assert ["umount", "/var/ossec/etc/rules"] in runner.commands
 
 
 
@@ -615,3 +619,14 @@ def test_state_save_failure_rolls_back_completed_provisioning(
         provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
 
     assert events == ["rollback"]
+
+
+
+@pytest.mark.parametrize("value", ["1", "250", "500"])
+def test_rule_test_max_sessions_accepts_documented_range(value: str) -> None:
+    assert provisioning._valid_rule_test_max_sessions(value)
+
+
+@pytest.mark.parametrize("value", ["0", "501", "many"])
+def test_rule_test_max_sessions_rejects_out_of_range_values(value: str) -> None:
+    assert not provisioning._valid_rule_test_max_sessions(value)

@@ -108,3 +108,15 @@ def test_root_capture_as_user_runs_workspace_python_as_invoking_user(
         "-c",
         "print('x')",
     ]]
+
+
+
+@pytest.mark.parametrize("executable", ["./tool", "../tool", "subdir/tool"])
+def test_privileged_relative_command_with_path_component_is_rejected(
+    tmp_path: Path,
+    executable: str,
+) -> None:
+    runner = CommandRunner(_user(tmp_path))
+
+    with pytest.raises(CommandError, match="absolute path or bare command name"):
+        runner.command([executable], privileged=True)

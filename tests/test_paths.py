@@ -30,8 +30,9 @@ def test_workspace_default_and_relative_paths_are_resolved(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    assert resolve_workspace(None) == tmp_path
-    assert resolve_workspace("project") == tmp_path / "project"
+    resolved = tmp_path.resolve()
+    assert resolve_workspace(None) == resolved
+    assert resolve_workspace("project") == resolved / "project"
 
 
 def test_workspace_expands_home(
@@ -40,7 +41,7 @@ def test_workspace_expands_home(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    assert resolve_workspace("~/project") == tmp_path / "project"
+    assert resolve_workspace("~/project") == tmp_path.resolve() / "project"
 
 
 @pytest.mark.parametrize("override", ["/", "/etc/wazuhdevenv", "/var/lib/wazuhdevenv"])
@@ -69,3 +70,18 @@ def test_unknown_sudo_user_is_reported_as_configuration_error(
 
     with pytest.raises(ConfigurationError, match="invoking user does not exist"):
         paths.InvokingUser.current()
+
+
+
+def test_managed_home_rejects_symlink_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "managed-link"
+    link.symlink_to(target, target_is_directory=True)
+    monkeypatch.setenv("WAZUHDEVENV_HOME", str(link))
+
+    with pytest.raises(ConfigurationError, match="managed home must not be a symlink"):
+        managed_home(InvokingUser("test", 1000, 1000, tmp_path))
