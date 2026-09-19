@@ -245,20 +245,39 @@ def _remove_managed_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def _recover_legacy_accessors(home: Path) -> None:
+def _current_corpus_is_managed(home: Path) -> bool:
     current = home / "current-corpus"
-    current_valid = (
-        current.is_symlink()
-        and (home / "current-corpus/tests").is_dir()
-        and (home / "current-corpus/manifest.json").is_file()
-    )
+    if not current.is_symlink():
+        return False
+    try:
+        target = current.resolve(strict=True)
+        corpora = (home / "corpora").resolve(strict=True)
+    except OSError:
+        return False
+    if target.parent != corpora:
+        return False
+    return (target / "tests").is_dir() and (target / "manifest.json").is_file()
 
-    for accessor, legacy, expected_target in (
-        (home / "tests", home / "tests.legacy", "current-corpus/tests"),
+
+def _validate_legacy_backup(path: Path, *, directory: bool) -> None:
+    if path.is_symlink():
+        raise CorpusError(f"legacy corpus backup must not be a symlink: {path}")
+    valid = path.is_dir() if directory else path.is_file()
+    if not valid:
+        expected = "directory" if directory else "regular file"
+        raise CorpusError(f"legacy corpus backup must be a {expected}: {path}")
+
+
+def _recover_legacy_accessors(home: Path) -> None:
+    current_valid = _current_corpus_is_managed(home)
+
+    for accessor, legacy, expected_target, legacy_is_directory in (
+        (home / "tests", home / "tests.legacy", "current-corpus/tests", True),
         (
             home / "corpus-manifest.json",
             home / "corpus-manifest.legacy.json",
             "current-corpus/manifest.json",
+            False,
         ),
     ):
         if not os.path.lexists(legacy):
@@ -271,6 +290,8 @@ def _recover_legacy_accessors(home: Path) -> None:
         ):
             _remove_managed_path(legacy)
             continue
+
+        _validate_legacy_backup(legacy, directory=legacy_is_directory)
 
         if os.path.lexists(accessor):
             if accessor.is_symlink():
