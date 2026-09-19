@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import CommandError, ConfigurationError, UnsupportedPlatformError
@@ -101,6 +102,15 @@ def _download(url: str) -> Path:
     except Exception:
         target.unlink(missing_ok=True)
         raise
+
+
+@dataclass(frozen=True)
+class ProvisioningSnapshot:
+    service_was_active: bool
+    ossec_conf: str
+    windows_rules: str
+    fstab: str
+    preexisting_mounts: frozenset[Path]
 
 
 class PackageManager:
@@ -449,9 +459,8 @@ def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
     return source_id == target_id
 
 
-def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
-    fstab_path = Path("/etc/fstab")
-    text = runner.capture(["cat", str(fstab_path)], privileged=True)
+def _fstab_has_entry(runner: CommandRunner, source: Path, target: Path) -> bool:
+    text = runner.capture(["cat", "/etc/fstab"], privileged=True)
     expected = f"{source} {target} none bind 0 0"
     for raw in text.splitlines():
         line = raw.strip()
@@ -460,13 +469,49 @@ def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
         fields = line.split()
         if len(fields) >= 2 and fields[1] == str(target):
             if line == expected:
-                return
+                return True
             raise ConfigurationError(f"conflicting fstab entry for {target}: {line}")
+    return False
+
+
+def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
+    if _fstab_has_entry(runner, source, target):
+        return
+    fstab_path = Path("/etc/fstab")
+    text = runner.capture(["cat", str(fstab_path)], privileged=True)
     updated = text
     if updated and not updated.endswith("\n"):
         updated += "\n"
-    updated += expected + "\n"
-    _write_privileged(runner, fstab_path, updated)
+    updated += f"{source} {target} none bind 0 0\n"
+    _rewrite_preserving_metadata(runner, fstab_path, updated)
+
+
+def preflight_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
+    for name in ("rules", "decoders"):
+        source = (workspace / name).resolve()
+        target = WAZUH_HOME / "etc" / name
+        if any(ch.isspace() for ch in str(source)):
+            raise ConfigurationError(
+                f"workspace path contains whitespace and cannot be persisted safely: {source}"
+            )
+
+        mounted = (
+            runner.run(
+                ["mountpoint", "-q", str(target)],
+                privileged=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+        if mounted:
+            if not _same_bind_mount(runner, source, target):
+                raise ConfigurationError(
+                    f"{target} is already a mount point for different content"
+                )
+        else:
+            _adopt_existing(runner, source, target)
+
+        _fstab_has_entry(runner, source, target)
 
 
 def configure_bind_mounts(runner: CommandRunner, workspace: Path) -> None:
@@ -513,14 +558,37 @@ def _service_manager() -> str:
     raise UnsupportedPlatformError("supported service manager not found (systemd or service)")
 
 
-def stop_wazuh(runner: CommandRunner) -> None:
+def is_wazuh_active(runner: CommandRunner) -> bool:
     manager = _service_manager()
     if manager == "systemd":
-        active = runner.run(["systemctl", "is-active", "--quiet", "wazuh-manager"], privileged=True, check=False)
-        if active.returncode == 0:
-            runner.run(["systemctl", "stop", "wazuh-manager"], privileged=True)
+        return (
+            runner.run(
+                ["systemctl", "is-active", "--quiet", "wazuh-manager"],
+                privileged=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+    return (
+        runner.run(
+            ["service", "wazuh-manager", "status"],
+            privileged=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def stop_wazuh(runner: CommandRunner) -> bool:
+    was_active = is_wazuh_active(runner)
+    if not was_active:
+        return False
+    manager = _service_manager()
+    if manager == "systemd":
+        runner.run(["systemctl", "stop", "wazuh-manager"], privileged=True)
     else:
-        runner.run(["service", "wazuh-manager", "stop"], privileged=True, check=False)
+        runner.run(["service", "wazuh-manager", "stop"], privileged=True)
+    return True
 
 
 def validate_wazuh(runner: CommandRunner) -> None:
@@ -577,6 +645,79 @@ def ensure_workspace_venv(runner: CommandRunner, workspace: Path) -> None:
     runner.run_as_user([str(python), "-m", "pip", "install", "pytest>=8,<10", tester_spec])
 
 
+def _capture_snapshot(
+    runner: CommandRunner,
+    workspace: Path,
+    service_was_active: bool,
+) -> ProvisioningSnapshot:
+    preexisting_mounts: set[Path] = set()
+    for name in ("rules", "decoders"):
+        source = (workspace / name).resolve()
+        target = WAZUH_HOME / "etc" / name
+        if _same_bind_mount(runner, source, target):
+            preexisting_mounts.add(target)
+
+    return ProvisioningSnapshot(
+        service_was_active=service_was_active,
+        ossec_conf=runner.capture(["cat", str(OSSEC_CONF)], privileged=True),
+        windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
+        fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
+        preexisting_mounts=frozenset(preexisting_mounts),
+    )
+
+
+def _restore_text_if_changed(
+    runner: CommandRunner,
+    path: Path,
+    original: str,
+) -> None:
+    current = runner.capture(["cat", str(path)], privileged=True)
+    if current != original:
+        _rewrite_preserving_metadata(runner, path, original)
+
+
+def _rollback_provisioning(
+    runner: CommandRunner,
+    workspace: Path,
+    snapshot: ProvisioningSnapshot,
+) -> None:
+    recovery_errors: list[str] = []
+
+    for name in reversed(("rules", "decoders")):
+        source = (workspace / name).resolve()
+        target = WAZUH_HOME / "etc" / name
+        if target in snapshot.preexisting_mounts:
+            continue
+        try:
+            if _same_bind_mount(runner, source, target):
+                runner.run(["umount", str(target)], privileged=True)
+        except Exception as exc:
+            recovery_errors.append(f"unmount {target}: {exc}")
+
+    for path, original in (
+        (Path("/etc/fstab"), snapshot.fstab),
+        (OSSEC_CONF, snapshot.ossec_conf),
+        (WINDOWS_RULES, snapshot.windows_rules),
+    ):
+        try:
+            _restore_text_if_changed(runner, path, original)
+        except Exception as exc:
+            recovery_errors.append(f"restore {path}: {exc}")
+
+    if snapshot.service_was_active:
+        try:
+            start_wazuh(runner)
+            wait_for_logtest(runner)
+        except Exception as exc:
+            recovery_errors.append(f"restart Wazuh Manager: {exc}")
+
+    if recovery_errors:
+        LOG.error(
+            "Provisioning rollback was incomplete: %s",
+            "; ".join(recovery_errors),
+        )
+
+
 def initialize(
     workspace: Path,
     home: Path,
@@ -594,15 +735,23 @@ def initialize(
 
     installed = package_manager.install_wazuh(wazuh_version)
 
+    preflight_bind_mounts(runner, workspace)
+    service_was_active = is_wazuh_active(runner)
+    snapshot = _capture_snapshot(runner, workspace, service_was_active)
+
     stop_wazuh(runner)
-    configure_ossec(runner)
-    configure_windows_rule_testing(runner)
-    configure_bind_mounts(runner, workspace)
-    configure_permissions(runner, workspace)
-    ensure_group_membership(runner, user)
-    validate_wazuh(runner)
-    start_wazuh(runner)
-    wait_for_logtest(runner)
+    try:
+        configure_ossec(runner)
+        configure_windows_rule_testing(runner)
+        configure_bind_mounts(runner, workspace)
+        configure_permissions(runner, workspace)
+        ensure_group_membership(runner, user)
+        validate_wazuh(runner)
+        start_wazuh(runner)
+        wait_for_logtest(runner)
+    except Exception:
+        _rollback_provisioning(runner, workspace, snapshot)
+        raise
 
     state = load_state(home)
     state.update(
