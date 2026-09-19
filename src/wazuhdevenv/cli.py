@@ -45,7 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
+def _configure_logging(home: Path, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     log_path = home / "logs" / "wazuhdevenv.log"
@@ -58,8 +58,6 @@ def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
         raise
 
     try:
-        if os.geteuid() == 0 and user.uid != 0:
-            os.fchown(fd, user.uid, user.gid)
         stream = os.fdopen(fd, "a", encoding="utf-8")
     except Exception:
         os.close(fd)
@@ -151,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         user = InvokingUser.current()
         home = managed_home(user)
         ensure_managed_home(home)
-        _configure_logging(home, user, args.verbose)
+        _configure_logging(home, args.verbose)
         logging_ready = True
 
         if args.command == "init":
