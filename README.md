@@ -61,7 +61,7 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - disables unnecessary manager modules used by the old development profile;
 - configures the Wazuh `rule_test` service for development throughput;
 - applies the known rule-60000 Windows EventChannel testing transformation;
-- preflights existing Wazuh rule/decoder content without mutating the workspace, ignores known pristine Wazuh placeholders, copies non-conflicting local content during the protected apply phase, and fails closed on genuine filename/content conflicts;
+- preflights existing Wazuh rule/decoder content without mutating the workspace, treats Wazuh's `local_rules.xml` and `local_decoder.xml` as disposable installation samples, copies other non-conflicting local content during the protected apply phase, and fails closed on genuine filename/content conflicts;
 - bind-mounts workspace rules and decoders into `/var/ossec/etc`;
 - persists the mounts in `/etc/fstab`;
 - configures ownership and permissions;
@@ -92,16 +92,10 @@ For development before a corpus release is available:
 wazuhdevenv init --skip-corpus
 ```
 
-If a newer Wazuh release ships byte-different stock `local_rules.xml` or
-`local_decoder.xml` content that conflicts with an existing workspace copy, the
-default remains fail-closed. To explicitly keep the workspace version for those
-two local files only:
-
-```bash
-wazuhdevenv init --prefer-workspace-local
-```
-
-This option does not suppress conflicts for arbitrary rule or decoder files.
+Wazuh installs sample `local_rules.xml` and `local_decoder.xml` files. In a
+workspace provisioned by `wazuh-devenv`, these samples are not treated as user
+content and are never copied into the project. Users can add their own rule or
+decoder files later, including files with those names if they choose.
 
 ## Workspace
 
