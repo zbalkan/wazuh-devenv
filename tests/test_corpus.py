@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import warnings
 import zipfile
@@ -128,19 +129,20 @@ def test_cache_archive_written_by_root_is_chowned_to_invoking_user(
 ) -> None:
     target = tmp_path / "cache.zip"
     user = InvokingUser("test", 1234, 5678, tmp_path)
-    calls: list[tuple[Path, int, int]] = []
+    calls: list[tuple[int, int, int]] = []
 
     monkeypatch.setattr(os, "geteuid", lambda: 0)
     monkeypatch.setattr(
         os,
-        "chown",
-        lambda path, uid, gid: calls.append((Path(path), uid, gid)),
+        "fchown",
+        lambda fd, uid, gid: calls.append((fd, uid, gid)),
     )
 
     corpus._write_owned_bytes(target, b"archive", user)
 
     assert target.read_bytes() == b"archive"
-    assert calls == [(target, 1234, 5678)]
+    assert calls
+    assert calls[0][1:] == (1234, 5678)
 
 
 
