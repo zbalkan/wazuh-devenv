@@ -461,7 +461,7 @@ def test_render_ossec_accepts_documented_rule_test_threads(threads: str) -> None
     assert provisioning._valid_rule_test_threads(threads)
 
 
-@pytest.mark.parametrize("threads", ["0", "129", "four"])
+@pytest.mark.parametrize("threads", ["0", "129", "four", "²", "١"])
 def test_render_ossec_rejects_invalid_rule_test_threads(threads: str) -> None:
     assert not provisioning._valid_rule_test_threads(threads)
 
@@ -474,7 +474,7 @@ def test_render_ossec_accepts_documented_session_timeout(timeout: str) -> None:
     assert provisioning._valid_rule_test_session_timeout(timeout)
 
 
-@pytest.mark.parametrize("timeout", ["0s", "366d", "1h 30m", "forever"])
+@pytest.mark.parametrize("timeout", ["0s", "366d", "1h 30m", "forever", "²s", "١s"])
 def test_render_ossec_rejects_invalid_session_timeout(timeout: str) -> None:
     assert not provisioning._valid_rule_test_session_timeout(timeout)
 
@@ -627,6 +627,6 @@ def test_rule_test_max_sessions_accepts_documented_range(value: str) -> None:
     assert provisioning._valid_rule_test_max_sessions(value)
 
 
-@pytest.mark.parametrize("value", ["0", "501", "many"])
+@pytest.mark.parametrize("value", ["0", "501", "many", "²", "١"])
 def test_rule_test_max_sessions_rejects_out_of_range_values(value: str) -> None:
     assert not provisioning._valid_rule_test_max_sessions(value)
