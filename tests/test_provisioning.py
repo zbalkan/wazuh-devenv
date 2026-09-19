@@ -217,6 +217,16 @@ def test_initialize_rolls_back_after_post_stop_failure(
     monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: events.append("preflight"))
     monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: True)
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: snapshot)
+    monkeypatch.setattr(
+        provisioning,
+        "_render_ossec_config",
+        lambda value: value,
+    )
+    monkeypatch.setattr(
+        provisioning,
+        "_render_windows_rule_testing",
+        lambda value: value,
+    )
     monkeypatch.setattr(provisioning, "stop_wazuh", lambda runner: events.append("stop") or True)
     monkeypatch.setattr(provisioning, "configure_ossec", lambda runner: events.append("ossec"))
     monkeypatch.setattr(
