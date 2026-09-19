@@ -29,6 +29,10 @@ class CommandRunner:
     def _require_trusted(executable: str) -> str:
         if os.path.isabs(executable):
             return executable
+        if "/" in executable:
+            raise CommandError(
+                f"privileged command must be an absolute path or bare command name: {executable}"
+            )
         resolved = shutil.which(executable, path=TRUSTED_EXEC_PATH)
         if not resolved:
             raise CommandError(f"required privileged command not found: {executable}")
