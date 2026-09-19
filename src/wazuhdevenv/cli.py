@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .corpus import resolve_release, update_corpus
-from .errors import ConfigurationError, WazuhDevenvError
+from .errors import ConfigurationError, CorpusError, WazuhDevenvError
 from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
@@ -110,7 +110,14 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
         LOG.info("Wazuh Manager ready: %s", version)
         if not args.skip_corpus:
             tester_version = _workspace_wazuhtester_version(user, home)
-            corpus = update_corpus(home, version, tester_version)
+            try:
+                corpus = update_corpus(home, version, tester_version)
+            except CorpusError as exc:
+                raise CorpusError(
+                    "Wazuh initialization completed, but rule-test corpus installation failed. "
+                    f"{exc}. Do not run 'init' again; after correcting the reported problem, "
+                    "run 'wazuhdevenv update'."
+                ) from exc
             LOG.info("Managed rule-test corpus ready: %s", corpus)
     return 0
 
