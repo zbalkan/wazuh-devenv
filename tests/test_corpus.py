@@ -332,3 +332,36 @@ def test_update_corpus_skips_active_release(
     )
 
     assert corpus.update_corpus(home, "4.14.8", "0.1.0rc1") == "4.14.8-r2"
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        zipfile.BadZipFile("bad zip"),
+        json.JSONDecodeError("bad manifest", "{", 0),
+        UnicodeDecodeError("ascii", b"\\xff", 0, 1, "invalid byte"),
+        OSError("I/O failure"),
+    ],
+)
+def test_update_corpus_normalizes_expected_install_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    release = CorpusRelease(
+        _manifest("4.14.8-r2"),
+        "manifest",
+        "archive",
+        "checksum",
+    )
+    monkeypatch.setattr(corpus, "resolve_release", lambda *args: release)
+
+    def fail_install(*args: object) -> None:
+        raise error
+
+    monkeypatch.setattr(corpus, "install_release", fail_install)
+
+    with pytest.raises(CorpusError, match="failed to install rule-test corpus"):
+        corpus.update_corpus(home, "4.14.8", "0.1.0rc1")
+

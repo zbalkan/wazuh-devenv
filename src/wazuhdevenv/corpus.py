@@ -291,7 +291,13 @@ def update_corpus(
     wazuh_version: str,
     wazuhtester_version: str,
 ) -> str:
-    release = resolve_release(wazuh_version, wazuhtester_version)
+    try:
+        release = resolve_release(wazuh_version, wazuhtester_version)
+    except CorpusError:
+        raise
+    except (json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
+        raise CorpusError(f"failed to resolve rule-test corpus: {exc}") from exc
+
     state = load_state(home)
     current = home / "current-corpus"
     if (
@@ -301,5 +307,10 @@ def update_corpus(
     ):
         return release.version
 
-    install_release(home, release, wazuh_version, wazuhtester_version)
+    try:
+        install_release(home, release, wazuh_version, wazuhtester_version)
+    except CorpusError:
+        raise
+    except (json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
+        raise CorpusError(f"failed to install rule-test corpus: {exc}") from exc
     return release.version
