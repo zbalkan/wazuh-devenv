@@ -692,3 +692,78 @@ def test_symlinked_legacy_backup_is_never_promoted(
 
     assert (home / backup_name).is_symlink()
     assert not os.path.lexists(home / target_name)
+
+
+
+@pytest.mark.parametrize("replace_name", ["tests", "manifest.json"])
+def test_symlinked_current_corpus_root_entry_does_not_authorize_backup_cleanup(
+    tmp_path: Path,
+    replace_name: str,
+) -> None:
+    home = tmp_path / "home"
+    release = home / "corpora/release"
+    (release / "tests").mkdir(parents=True)
+    (release / "manifest.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
+        encoding="utf-8",
+    )
+
+    outside = tmp_path / "outside"
+    if replace_name == "tests":
+        outside.mkdir()
+        shutil.rmtree(release / "tests")
+        (release / "tests").symlink_to(outside, target_is_directory=True)
+    else:
+        outside.write_text("{}\n", encoding="utf-8")
+        (release / "manifest.json").unlink()
+        (release / "manifest.json").symlink_to(outside)
+
+    (home / "current-corpus").symlink_to("corpora/release")
+    (home / "tests").symlink_to("current-corpus/tests")
+    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
+    (home / "tests.legacy").mkdir()
+    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.legacy.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
+        encoding="utf-8",
+    )
+
+    corpus._recover_legacy_accessors(home)
+
+    assert not (home / "tests").is_symlink()
+    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
+    assert not (home / "corpus-manifest.json").is_symlink()
+    assert json.loads(
+        (home / "corpus-manifest.json").read_text(encoding="utf-8")
+    )["corpus_version"] == "4.14.8-r1"
+
+
+def test_nested_symlink_in_current_corpus_does_not_authorize_backup_cleanup(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    release = home / "corpora/release"
+    (release / "tests").mkdir(parents=True)
+    (release / "manifest.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.py"
+    outside.write_text("external\n", encoding="utf-8")
+    (release / "tests/test_link.py").symlink_to(outside)
+
+    (home / "current-corpus").symlink_to("corpora/release")
+    (home / "tests").symlink_to("current-corpus/tests")
+    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
+    (home / "tests.legacy").mkdir()
+    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.legacy.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
+        encoding="utf-8",
+    )
+
+    corpus._recover_legacy_accessors(home)
+
+    assert not (home / "tests").is_symlink()
+    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
+    assert not (home / "corpus-manifest.json").is_symlink()
