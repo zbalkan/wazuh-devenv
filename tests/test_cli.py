@@ -9,6 +9,7 @@ import pytest
 
 import wazuhdevenv.cli as cli
 from wazuhdevenv.corpus import CorpusRelease
+from wazuhdevenv.errors import CorpusError
 from wazuhdevenv.paths import InvokingUser
 
 
@@ -140,7 +141,7 @@ def test_init_propagates_corpus_failure(
     monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
 
     def fail_corpus(*args: object, **kwargs: object) -> str:
-        raise cli.CorpusError("release unavailable")
+        raise CorpusError("release unavailable")
 
     monkeypatch.setattr(cli, "update_corpus", fail_corpus)
 
