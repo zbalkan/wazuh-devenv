@@ -83,3 +83,34 @@ def test_configure_logging_refuses_symlinked_log_file(tmp_path: Path) -> None:
         cli._configure_logging(home, _user(tmp_path), False)
 
     assert victim.read_text(encoding="utf-8") == "unchanged\n"
+
+
+
+def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    python = workspace / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    home = tmp_path / "managed"
+    home.mkdir()
+    (home / "state.json").write_text(
+        '{"schema_version": 1, "workspace": "' + str(workspace) + '"}\n',
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    class FakeRunner:
+        def __init__(self, user: InvokingUser) -> None:
+            del user
+
+        def capture_as_user(self, args: list[str]) -> str:
+            calls.append(args)
+            return "0.1.0rc1\n"
+
+    monkeypatch.setattr(cli, "CommandRunner", FakeRunner)
+
+    assert cli._workspace_wazuhtester_version(_user(tmp_path), home) == "0.1.0rc1"
+    assert calls and calls[0][0] == str(python)

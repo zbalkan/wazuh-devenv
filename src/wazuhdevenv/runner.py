@@ -11,6 +11,9 @@ from .errors import CommandError
 from .paths import InvokingUser
 
 
+TRUSTED_EXEC_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
 class CommandRunner:
     def __init__(self, user: InvokingUser) -> None:
         self.user = user
@@ -22,16 +25,24 @@ class CommandRunner:
             raise CommandError(f"required command not found: {executable}")
         return resolved
 
+    @staticmethod
+    def _require_trusted(executable: str) -> str:
+        if os.path.isabs(executable):
+            return executable
+        resolved = shutil.which(executable, path=TRUSTED_EXEC_PATH)
+        if not resolved:
+            raise CommandError(f"required privileged command not found: {executable}")
+        return resolved
+
     def command(self, args: Sequence[str], *, privileged: bool = False) -> list[str]:
         if not args:
             raise ValueError("command must not be empty")
-        if privileged and os.path.isabs(args[0]):
-            executable = args[0]
-        else:
-            executable = self._require(args[0])
+        executable = (
+            self._require_trusted(args[0]) if privileged else self._require(args[0])
+        )
         command = [executable, *args[1:]]
         if privileged and os.geteuid() != 0:
-            sudo = self._require("sudo")
+            sudo = self._require_trusted("sudo")
             return [sudo, "--", *command]
         return command
 
@@ -64,14 +75,41 @@ class CommandRunner:
             raise CommandError(f"command failed ({result.returncode}): {' '.join(command)}{suffix}")
         return result.stdout
 
-    def run_as_user(self, args: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def _as_user_command(self, args: Sequence[str]) -> list[str]:
+        if not args:
+            raise ValueError("command must not be empty")
         if os.geteuid() != 0 or self.user.uid == 0:
-            return self.run(args, check=check)
+            return self.command(args)
 
-        sudo = self._require("sudo")
-        executable = self._require(args[0])
-        command = [sudo, "-u", self.user.name, "-H", "--", executable, *args[1:]]
+        sudo = self._require_trusted("sudo")
+        executable = args[0] if os.path.isabs(args[0]) else self._require(args[0])
+        return [sudo, "-u", self.user.name, "-H", "--", executable, *args[1:]]
+
+    def run_as_user(
+        self,
+        args: Sequence[str],
+        *,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        command = self._as_user_command(args)
         result = subprocess.run(command, check=False, text=True)
         if check and result.returncode != 0:
             raise CommandError(f"command failed ({result.returncode}): {' '.join(command)}")
         return result
+
+    def capture_as_user(self, args: Sequence[str]) -> str:
+        command = self._as_user_command(args)
+        result = subprocess.run(
+            command,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip()
+            suffix = f": {detail}" if detail else ""
+            raise CommandError(
+                f"command failed ({result.returncode}): {' '.join(command)}{suffix}"
+            )
+        return result.stdout
