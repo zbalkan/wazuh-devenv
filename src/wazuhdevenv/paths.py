@@ -60,8 +60,10 @@ def managed_home(user: InvokingUser) -> Path:
     override = os.environ.get("WAZUHDEVENV_HOME")
     if override:
         path = Path(override).expanduser()
-        path = path.resolve() if path.is_absolute() else (Path.cwd() / path).resolve()
-        return _reject_system_path(path, "managed home")
+        candidate = path if path.is_absolute() else Path.cwd() / path
+        if candidate.is_symlink():
+            raise ConfigurationError(f"managed home must not be a symlink: {candidate}")
+        return _reject_system_path(candidate.resolve(), "managed home")
     return user.home / ".wazuhdevenv"
 
 

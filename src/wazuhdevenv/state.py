@@ -59,6 +59,10 @@ def managed_lock(path: Path, user: InvokingUser) -> Iterator[None]:
             fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
+def _valid_schema_version(value: object) -> bool:
+    return type(value) is int and value == 1
+
+
 def load_state(path: Path) -> dict[str, object]:
     state_path = path / "state.json"
     if state_path.is_symlink():
@@ -66,14 +70,14 @@ def load_state(path: Path) -> dict[str, object]:
     if not state_path.exists():
         return {"schema_version": 1}
     data = json.loads(state_path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or data.get("schema_version") != 1:
+    if not isinstance(data, dict) or not _valid_schema_version(data.get("schema_version")):
         raise ValueError(f"unsupported state file: {state_path}")
     return data
 
 
 def save_state(path: Path, state: dict[str, object], user: InvokingUser) -> None:
     schema_version = state.get("schema_version", 1)
-    if schema_version != 1:
+    if not _valid_schema_version(schema_version):
         raise ValueError(f"unsupported state schema version: {schema_version}")
     state = {**state, "schema_version": 1}
     target = path / "state.json"

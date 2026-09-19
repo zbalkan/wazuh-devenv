@@ -238,6 +238,51 @@ def _atomic_symlink(link: Path, target: str, user: InvokingUser) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _remove_managed_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def _recover_legacy_accessors(home: Path) -> None:
+    current = home / "current-corpus"
+    current_valid = (
+        current.is_symlink()
+        and (home / "current-corpus/tests").is_dir()
+        and (home / "current-corpus/manifest.json").is_file()
+    )
+
+    for accessor, legacy, expected_target in (
+        (home / "tests", home / "tests.legacy", "current-corpus/tests"),
+        (
+            home / "corpus-manifest.json",
+            home / "corpus-manifest.legacy.json",
+            "current-corpus/manifest.json",
+        ),
+    ):
+        if not os.path.lexists(legacy):
+            continue
+
+        if (
+            current_valid
+            and accessor.is_symlink()
+            and os.readlink(accessor) == expected_target
+        ):
+            _remove_managed_path(legacy)
+            continue
+
+        if os.path.lexists(accessor):
+            if accessor.is_symlink():
+                accessor.unlink()
+            else:
+                raise CorpusError(
+                    "interrupted corpus migration left both active and backup content; "
+                    f"inspect {accessor} and {legacy}, then remove the obsolete copy"
+                )
+        os.replace(legacy, accessor)
+
+
 def _prepare_corpus_accessors(
     home: Path,
     user: InvokingUser,
@@ -368,6 +413,7 @@ def install_release(
     moved_manifest: Path | None = None
     pointer_swapped = False
     try:
+        _recover_legacy_accessors(home)
         _safe_extract(archive, release_root)
         embedded_path = release_root / "manifest.json"
         tests_path = release_root / "tests"
