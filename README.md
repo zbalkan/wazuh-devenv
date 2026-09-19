@@ -55,7 +55,7 @@ An explicit workspace path is also accepted:
 wazuhdevenv init ~/projects/my-wazuh-rules
 ```
 
-`init` is an idempotent reconciliation operation. A converged host does not reinstall already-present system prerequisites or require package-repository access merely to recheck them. It currently performs the responsibilities previously implemented by `install.sh`:
+`init` is a one-shot provisioning operation. After a successful initialization, any later `init` invocation fails immediately using the recorded state; it does not reconcile, repair, switch, or re-provision the environment. It currently performs the responsibilities previously implemented by `install.sh`:
 
 - detects APT, DNF, or YUM;
 - installs or verifies Wazuh Manager;
@@ -77,7 +77,7 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - backs up and restores the Wazuh configuration, Windows testing rule, fstab entries, and newly created bind mounts if host configuration fails;
 - starts the manager and waits for a stable logtest socket;
 - initializes `~/.wazuhdevenv`;
-- attempts to download the compatible default rule-test corpus; corpus download failure does not make an otherwise working Wazuh development environment fail initialization.
+- downloads and validates the compatible default rule-test corpus unless `--skip-corpus` is specified; corpus failures are fatal and reported to the user.
 
 The CLI is intended to be run as the developer:
 
@@ -86,6 +86,8 @@ wazuhdevenv init
 ```
 
 It invokes `sudo` only for operations that require system privileges. Do not run the CLI itself with `sudo` or as root.
+
+Do not run `init` again after it succeeds. A second invocation exits with the recorded workspace, Wazuh home, Wazuh version, and state-file path so the environment can be inspected manually. If only the managed rule-test corpus needs attention, use `wazuhdevenv update`; `init` does not act as a repair command.
 
 To require an exact Wazuh version:
 
