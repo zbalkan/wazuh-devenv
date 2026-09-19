@@ -86,3 +86,33 @@ def test_save_state_rejects_unsupported_schema(tmp_path: Path) -> None:
         )
 
     assert not (tmp_path / "state.json").exists()
+
+
+
+@pytest.mark.parametrize("schema", [True, False, 1.0, "1"])
+def test_save_state_rejects_non_integer_schema_values(
+    tmp_path: Path,
+    schema: object,
+) -> None:
+    from wazuhdevenv.state import save_state
+
+    with pytest.raises(ValueError, match="unsupported state schema version"):
+        save_state(
+            tmp_path,
+            {"schema_version": schema},
+            _user(tmp_path),
+        )
+
+
+@pytest.mark.parametrize("schema_json", ["true", "false", "1.0", "\"1\""])
+def test_load_state_rejects_non_integer_schema_values(
+    tmp_path: Path,
+    schema_json: str,
+) -> None:
+    (tmp_path / "state.json").write_text(
+        f'{{"schema_version": {schema_json}}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unsupported state file"):
+        load_state(tmp_path)

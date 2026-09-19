@@ -477,3 +477,60 @@ def test_chown_corpus_tree_never_follows_symlinks(
     link_calls = [follow for path, follow in calls if path == link]
     assert link_calls == [False]
     assert victim.read_text(encoding="utf-8") == "unchanged\n"
+
+
+
+def test_recover_legacy_accessors_restores_interrupted_migration(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    legacy_tests = home / "tests.legacy"
+    legacy_tests.mkdir()
+    (legacy_tests / "old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.legacy.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
+        encoding="utf-8",
+    )
+
+    corpus._recover_legacy_accessors(home)
+
+    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
+    assert (home / "corpus-manifest.json").is_file()
+    assert not legacy_tests.exists()
+    assert not (home / "corpus-manifest.legacy.json").exists()
+
+
+def test_recover_legacy_accessors_cleans_stale_backups_after_committed_migration(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    release = home / "corpora/release"
+    (release / "tests").mkdir(parents=True)
+    (release / "manifest.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
+        encoding="utf-8",
+    )
+    (home / "current-corpus").symlink_to("corpora/release")
+    (home / "tests").symlink_to("current-corpus/tests")
+    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
+    (home / "tests.legacy").mkdir()
+    (home / "corpus-manifest.legacy.json").write_text("{}\n", encoding="utf-8")
+
+    corpus._recover_legacy_accessors(home)
+
+    assert not (home / "tests.legacy").exists()
+    assert not (home / "corpus-manifest.legacy.json").exists()
+    assert (home / "tests").is_symlink()
+    assert (home / "corpus-manifest.json").is_symlink()
+
+
+def test_recover_legacy_accessors_reports_ambiguous_plain_content(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    (home / "tests").mkdir(parents=True)
+    (home / "tests.legacy").mkdir()
+
+    with pytest.raises(CorpusError, match="inspect .* then remove the obsolete copy"):
+        corpus._recover_legacy_accessors(home)

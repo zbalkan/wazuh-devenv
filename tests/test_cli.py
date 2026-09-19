@@ -101,10 +101,12 @@ def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
         encoding="utf-8",
     )
     calls: list[list[str]] = []
+    users: list[InvokingUser] = []
+    invoking_user = _user(tmp_path)
 
     class FakeRunner:
         def __init__(self, user: InvokingUser) -> None:
-            del user
+            users.append(user)
 
         def capture_as_user(self, args: list[str]) -> str:
             calls.append(args)
@@ -112,5 +114,6 @@ def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
 
     monkeypatch.setattr(cli, "CommandRunner", FakeRunner)
 
-    assert cli._workspace_wazuhtester_version(_user(tmp_path), home) == "0.1.0rc1"
+    assert cli._workspace_wazuhtester_version(invoking_user, home) == "0.1.0rc1"
+    assert users == [invoking_user]
     assert calls and calls[0][0] == str(python)
