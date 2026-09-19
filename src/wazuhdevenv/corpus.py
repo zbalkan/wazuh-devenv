@@ -155,6 +155,12 @@ def _safe_extract(archive: Path, destination: Path) -> None:
         source.extractall(destination)
 
 
+def _write_owned_bytes(path: Path, content: bytes, user: InvokingUser) -> None:
+    path.write_bytes(content)
+    if os.geteuid() == 0 and user.uid != 0:
+        os.chown(path, user.uid, user.gid)
+
+
 def install_release(
     home: Path,
     release: CorpusRelease,
@@ -168,7 +174,7 @@ def install_release(
     staging_root.mkdir(parents=True, exist_ok=True)
 
     archive = cache / f"wazuh-rule-tests-{release.version}.zip"
-    archive.write_bytes(_request(release.archive_url))
+    _write_owned_bytes(archive, _request(release.archive_url), user)
     _verify_checksum(archive, _request(release.checksum_url).decode("ascii", errors="strict"))
 
     staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))

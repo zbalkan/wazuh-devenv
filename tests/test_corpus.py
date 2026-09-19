@@ -119,3 +119,25 @@ def test_failed_state_write_rolls_back_tests_and_manifest(
     assert not (home / "tests/new.py").exists()
     assert json.loads(manifest_target.read_text(encoding="utf-8")) == old_manifest
     assert not (home / "corpus-manifest.previous.json").exists()
+
+
+
+def test_cache_archive_written_by_root_is_chowned_to_invoking_user(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "cache.zip"
+    user = InvokingUser("test", 1234, 5678, tmp_path)
+    calls: list[tuple[Path, int, int]] = []
+
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        os,
+        "chown",
+        lambda path, uid, gid: calls.append((Path(path), uid, gid)),
+    )
+
+    corpus._write_owned_bytes(target, b"archive", user)
+
+    assert target.read_bytes() == b"archive"
+    assert calls == [(target, 1234, 5678)]
