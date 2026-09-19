@@ -121,10 +121,9 @@ def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
 
 
 
-def test_init_treats_corpus_failure_as_warning(
+def test_init_propagates_corpus_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     user = _user(tmp_path)
     home = tmp_path / "managed"
@@ -144,17 +143,13 @@ def test_init_treats_corpus_failure_as_warning(
         raise cli.CorpusError("release unavailable")
 
     monkeypatch.setattr(cli, "update_corpus", fail_corpus)
-    caplog.set_level("WARNING")
 
-    result = cli._init_command(
-        argparse.Namespace(path=None, wazuh_version=None, skip_corpus=False),
-        user,
-        home,
-    )
-
-    assert result == 0
-    assert "Wazuh is ready" in caplog.text
-    assert "wazuhdevenv update" in caplog.text
+    with pytest.raises(cli.WazuhDevenvError, match="release unavailable"):
+        cli._init_command(
+            argparse.Namespace(path=None, wazuh_version=None, skip_corpus=False),
+            user,
+            home,
+        )
 
 
 def test_main_rejects_direct_root_invocation(

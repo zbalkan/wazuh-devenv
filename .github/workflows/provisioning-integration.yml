@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  init-idempotence:
+  init-once:
     runs-on: ubuntu-latest
     env:
       WAZUHTESTER_SPEC: "wazuhtester==0.1.0rc1"
@@ -52,11 +52,19 @@ jobs:
           sudo mountpoint -q /var/ossec/etc/decoders
           "$WORKSPACE/.venv/bin/python" -c "import importlib.metadata as m; v=m.version('wazuhtester'); assert v == '0.1.0rc1', v; print(v)"
 
-      - name: Second init must converge
+      - name: Second init must fail fast
         run: |
-          wazuhdevenv init "$WORKSPACE" --wazuh-version "$WAZUH_VERSION" --skip-corpus
+          set +e
+          output="$(wazuhdevenv init "$WORKSPACE" --wazuh-version "$WAZUH_VERSION" --skip-corpus 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep -Fq "already initialized" <<<"$output"
+          grep -Fq "$WORKSPACE" <<<"$output"
+          grep -Fq "$WAZUHDEVENV_HOME/state.json" <<<"$output"
 
-      - name: Verify environment after second init
+      - name: Verify environment after rejected second init
         run: |
           sudo systemctl is-active --quiet wazuh-manager
           sudo test -S /var/ossec/queue/sockets/logtest

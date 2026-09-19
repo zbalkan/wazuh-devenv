@@ -340,6 +340,44 @@ def test_group_membership_is_added_only_when_needed() -> None:
     assert missing.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
 
 
+def test_initialize_rejects_second_init_before_provisioning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    workspace = tmp_path / "workspace"
+    (home / "state.json").write_text(
+        '{"schema_version": 1, "workspace": "/existing/workspace", '
+        '"wazuh_home": "/var/ossec", "wazuh_version": "4.14.8"}\n',
+        encoding="utf-8",
+    )
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+    events: list[str] = []
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: events.append("linux"))
+
+    def unexpected_runner(user: InvokingUser) -> object:
+        del user
+        events.append("runner")
+        raise AssertionError("provisioning must not start")
+
+    monkeypatch.setattr(provisioning, "CommandRunner", unexpected_runner)
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"already initialized.*init.*only be run once",
+    ) as exc_info:
+        provisioning.initialize(workspace, home, user)
+
+    message = str(exc_info.value)
+    assert "Workspace: /existing/workspace" in message
+    assert "Wazuh home: /var/ossec" in message
+    assert "Wazuh version: 4.14.8" in message
+    assert f"State: {home / 'state.json'}" in message
+    assert events == ["linux"]
+
+
 def test_initialize_checks_service_manager_before_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

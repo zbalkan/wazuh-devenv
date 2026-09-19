@@ -1,4 +1,4 @@
-"""Idempotent provisioning for a Wazuh development workspace."""
+"""One-shot provisioning for a Wazuh development workspace."""
 
 from __future__ import annotations
 
@@ -808,9 +808,19 @@ def initialize(
     wazuh_version: str | None = None,
 ) -> str:
     ensure_linux()
+    state = load_state(home)
+    existing_workspace = state.get("workspace")
+    if isinstance(existing_workspace, str):
+        raise ConfigurationError(
+            "wazuh-devenv is already initialized; 'init' may only be run once. "
+            f"Workspace: {existing_workspace}; "
+            f"Wazuh home: {state.get('wazuh_home', 'unknown')}; "
+            f"Wazuh version: {state.get('wazuh_version', 'unknown')}; "
+            f"State: {home / 'state.json'}"
+        )
+
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
-    state = load_state(home)
 
     package_manager.ensure_system_dependencies()
     _service_manager()
