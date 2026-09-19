@@ -11,7 +11,7 @@ from .errors import CommandError
 from .paths import InvokingUser
 
 
-TRUSTED_EXEC_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+TRUSTED_EXEC_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 class CommandRunner:

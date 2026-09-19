@@ -550,3 +550,68 @@ def test_rollback_stops_manager_that_was_initially_inactive(
     assert "enabled:False" in events
     assert "group-removed" in events
     assert not any(event == "start" for event in events)
+
+
+
+def test_state_save_failure_rolls_back_completed_provisioning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+    snapshot = ProvisioningSnapshot(
+        service_was_active=False,
+        ossec_conf="original",
+        windows_rules="original",
+        fstab="original",
+        preexisting_mounts=frozenset(),
+        service_was_enabled=False,
+        workspace_metadata=(),
+    )
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            pass
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: None)
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: snapshot)
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: False)
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: None)
+    monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(
+        provisioning,
+        "save_state",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("state failure")),
+    )
+    monkeypatch.setattr(
+        provisioning,
+        "_rollback_provisioning",
+        lambda *args: events.append("rollback"),
+    )
+
+    with pytest.raises(RuntimeError, match="state failure"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == ["rollback"]

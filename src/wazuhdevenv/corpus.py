@@ -247,24 +247,46 @@ def _prepare_corpus_accessors(
     legacy_tests = home / "tests.legacy"
     legacy_manifest = home / "corpus-manifest.legacy.json"
 
+    old_tests_link = os.readlink(tests) if tests.is_symlink() else None
+    old_manifest_link = os.readlink(manifest) if manifest.is_symlink() else None
     moved_tests: Path | None = None
     moved_manifest: Path | None = None
 
-    if os.path.lexists(tests) and not tests.is_symlink():
-        if legacy_tests.exists():
-            raise CorpusError(f"legacy corpus backup already exists: {legacy_tests}")
-        os.replace(tests, legacy_tests)
-        moved_tests = legacy_tests
+    try:
+        if os.path.lexists(tests) and not tests.is_symlink():
+            if legacy_tests.exists():
+                raise CorpusError(f"legacy corpus backup already exists: {legacy_tests}")
+            os.replace(tests, legacy_tests)
+            moved_tests = legacy_tests
 
-    if os.path.lexists(manifest) and not manifest.is_symlink():
-        if legacy_manifest.exists():
-            raise CorpusError(f"legacy corpus manifest backup already exists: {legacy_manifest}")
-        os.replace(manifest, legacy_manifest)
-        moved_manifest = legacy_manifest
+        if os.path.lexists(manifest) and not manifest.is_symlink():
+            if legacy_manifest.exists():
+                raise CorpusError(
+                    f"legacy corpus manifest backup already exists: {legacy_manifest}"
+                )
+            os.replace(manifest, legacy_manifest)
+            moved_manifest = legacy_manifest
 
-    _atomic_symlink(tests, "current-corpus/tests", user)
-    _atomic_symlink(manifest, "current-corpus/manifest.json", user)
-    return moved_tests, moved_manifest
+        _atomic_symlink(tests, "current-corpus/tests", user)
+        _atomic_symlink(manifest, "current-corpus/manifest.json", user)
+        return moved_tests, moved_manifest
+    except Exception:
+        if old_tests_link is not None:
+            _atomic_symlink(tests, old_tests_link, user)
+        else:
+            if tests.is_symlink():
+                tests.unlink()
+            if moved_tests is not None and moved_tests.exists():
+                os.replace(moved_tests, tests)
+
+        if old_manifest_link is not None:
+            _atomic_symlink(manifest, old_manifest_link, user)
+        else:
+            if manifest.is_symlink():
+                manifest.unlink()
+            if moved_manifest is not None and moved_manifest.exists():
+                os.replace(moved_manifest, manifest)
+        raise
 
 
 def install_release(
@@ -313,7 +335,19 @@ def install_release(
         if embedded != release.manifest:
             raise CorpusError("standalone and embedded corpus manifests differ")
 
-        if release_root.exists():
+        if os.path.lexists(release_root):
+            if release_root.is_symlink() or not release_root.is_dir():
+                raise CorpusError(f"invalid existing corpus directory: {release_root}")
+            existing_manifest = release_root / "manifest.json"
+            existing_tests = release_root / "tests"
+            try:
+                existing = json.loads(existing_manifest.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise CorpusError(
+                    f"invalid existing corpus manifest: {existing_manifest}"
+                ) from exc
+            if existing != release.manifest or not existing_tests.is_dir():
+                raise CorpusError(f"existing corpus content is inconsistent: {release_root}")
             shutil.rmtree(staging)
             staging = None
         else:
