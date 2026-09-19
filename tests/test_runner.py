@@ -120,3 +120,17 @@ def test_privileged_relative_command_with_path_component_is_rejected(
 
     with pytest.raises(CommandError, match="absolute path or bare command name"):
         runner.command([executable], privileged=True)
+
+
+
+def test_privileged_absolute_executable_outside_trusted_roots_is_rejected(
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "workspace/tool"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    runner = CommandRunner(_user(tmp_path))
+
+    with pytest.raises(CommandError, match="outside trusted roots"):
+        runner.command([str(executable)], privileged=True)
