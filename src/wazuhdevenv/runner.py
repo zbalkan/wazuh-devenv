@@ -25,7 +25,10 @@ class CommandRunner:
     def command(self, args: Sequence[str], *, privileged: bool = False) -> list[str]:
         if not args:
             raise ValueError("command must not be empty")
-        executable = self._require(args[0])
+        if privileged and os.path.isabs(args[0]):
+            executable = args[0]
+        else:
+            executable = self._require(args[0])
         command = [executable, *args[1:]]
         if privileged and os.geteuid() != 0:
             sudo = self._require("sudo")
