@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import stat
@@ -25,6 +26,7 @@ from .state import load_state, save_state
 
 RELEASES_API = "https://api.github.com/repos/zbalkan/wazuh-rule-tests/releases?per_page=100"
 USER_AGENT = "wazuh-devenv"
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -162,10 +164,33 @@ def _safe_extract(archive: Path, destination: Path) -> None:
         source.extractall(destination)
 
 
+def _write_owned_temp(
+    directory: Path,
+    prefix: str,
+    content: bytes,
+    user: InvokingUser,
+) -> Path:
+    fd, name = tempfile.mkstemp(prefix=prefix, dir=directory)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+            if os.geteuid() == 0 and user.uid != 0:
+                os.fchown(stream.fileno(), user.uid, user.gid)
+        return temporary
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def _write_owned_bytes(path: Path, content: bytes, user: InvokingUser) -> None:
-    path.write_bytes(content)
-    if os.geteuid() == 0 and user.uid != 0:
-        os.chown(path, user.uid, user.gid)
+    temporary = _write_owned_temp(path.parent, f".{path.name}.", content, user)
+    try:
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def install_release(
@@ -185,12 +210,15 @@ def install_release(
     _verify_checksum(archive, _request(release.checksum_url).decode("ascii", errors="strict"))
 
     staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
+    active = home / "tests"
+    previous = home / "tests.previous"
+    manifest_target = home / "corpus-manifest.json"
+    previous_manifest = home / "corpus-manifest.previous.json"
+    temporary_manifest: Path | None = None
     activated = False
     had_previous = False
     manifest_activated = False
     had_previous_manifest = False
-    manifest_target = home / "corpus-manifest.json"
-    previous_manifest = home / "corpus-manifest.previous.json"
     try:
         _safe_extract(archive, staging)
         embedded_path = staging / "manifest.json"
@@ -201,8 +229,6 @@ def install_release(
         if embedded != release.manifest:
             raise CorpusError("standalone and embedded corpus manifests differ")
 
-        active = home / "tests"
-        previous = home / "tests.previous"
         if previous.exists():
             shutil.rmtree(previous)
         if active.exists():
@@ -211,10 +237,11 @@ def install_release(
         os.replace(tests_path, active)
         activated = True
 
-        temporary_manifest = home / ".corpus-manifest.json.tmp"
-        temporary_manifest.write_text(
-            json.dumps(release.manifest, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        temporary_manifest = _write_owned_temp(
+            home,
+            ".corpus-manifest.",
+            (json.dumps(release.manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            user,
         )
         if previous_manifest.exists():
             previous_manifest.unlink()
@@ -222,6 +249,7 @@ def install_release(
             os.replace(manifest_target, previous_manifest)
             had_previous_manifest = True
         os.replace(temporary_manifest, manifest_target)
+        temporary_manifest = None
         manifest_activated = True
 
         if os.geteuid() == 0 and user.uid != 0:
@@ -243,13 +271,7 @@ def install_release(
             }
         )
         save_state(home, state, user)
-
-        if previous.exists():
-            shutil.rmtree(previous)
-        previous_manifest.unlink(missing_ok=True)
     except Exception:
-        active = home / "tests"
-        previous = home / "tests.previous"
         if activated and active.exists():
             shutil.rmtree(active)
         if had_previous and previous.exists():
@@ -259,7 +281,23 @@ def install_release(
         if had_previous_manifest and previous_manifest.exists():
             os.replace(previous_manifest, manifest_target)
         raise
+    else:
+        if previous.exists():
+            try:
+                shutil.rmtree(previous)
+            except OSError as exc:
+                LOG.warning("Could not remove previous corpus backup %s: %s", previous, exc)
+        try:
+            previous_manifest.unlink(missing_ok=True)
+        except OSError as exc:
+            LOG.warning(
+                "Could not remove previous corpus manifest backup %s: %s",
+                previous_manifest,
+                exc,
+            )
     finally:
+        if temporary_manifest is not None:
+            temporary_manifest.unlink(missing_ok=True)
         shutil.rmtree(staging, ignore_errors=True)
 
 

@@ -211,3 +211,82 @@ def test_authenticated_api_request_sends_github_token_only_to_api_origin(
             "https://github.com/owner/repo/releases/download/v1/file.zip",
             authenticated=True,
         )
+
+
+
+def test_atomic_owned_write_replaces_symlink_without_following_it(
+    tmp_path: Path,
+) -> None:
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"unchanged")
+    target = tmp_path / "archive.zip"
+    target.symlink_to(victim)
+
+    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
+    corpus._write_owned_bytes(target, b"new archive", user)
+
+    assert victim.read_bytes() == b"unchanged"
+    assert not target.is_symlink()
+    assert target.read_bytes() == b"new archive"
+
+
+def test_post_commit_backup_cleanup_failure_keeps_new_state_and_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "cache").mkdir()
+    (home / "staging").mkdir()
+    active = home / "tests"
+    active.mkdir()
+    (active / "old.py").write_text("old\n", encoding="utf-8")
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "active_corpus": "4.14-r0"}) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = {
+        "schema_version": 1,
+        "corpus_version": "4.14-r1",
+        "wazuh": {"requires": "==4.14.8"},
+        "python": {"requires": ">=3.10"},
+        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
+    }
+    archive_path = tmp_path / "corpus.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr("tests/new.py", "new\n")
+    archive_bytes = archive_path.read_bytes()
+    checksum = hashlib.sha256(archive_bytes).hexdigest().encode("ascii")
+    payloads = {
+        "archive": archive_bytes,
+        "checksum": checksum + b"  corpus.zip\n",
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    previous = home / "tests.previous"
+    real_rmtree = shutil.rmtree
+
+    def fail_backup_cleanup(path: object, *args: object, **kwargs: object) -> None:
+        if Path(path) == previous and previous.exists() and not kwargs.get("ignore_errors"):
+            raise OSError("simulated cleanup failure")
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", fail_backup_cleanup)
+
+    release = CorpusRelease(
+        manifest=manifest,
+        manifest_url="manifest",
+        archive_url="archive",
+        checksum_url="checksum",
+    )
+    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
+
+    corpus.install_release(home, release, "4.14.8", user, "0.1.0rc1")
+
+    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
+    assert state["active_corpus"] == "4.14-r1"
+    assert (home / "tests/new.py").read_text(encoding="utf-8") == "new\n"
+    assert previous.exists()
+    assert (previous / "old.py").read_text(encoding="utf-8") == "old\n"
