@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -130,6 +131,7 @@ class ProvisioningSnapshot:
     windows_rules: str
     fstab: str
     preexisting_mounts: frozenset[Path]
+    service_was_enabled: bool | None = None
     workspace_metadata: tuple[WorkspaceMetadata, ...] = ()
 
 
@@ -330,7 +332,7 @@ def _replace_block_child(
     block_pattern: str,
     child: str,
     value: str,
-    allowed: set[str],
+    allowed: set[str] | Callable[[str], bool],
     description: str,
 ) -> str:
     block_re = re.compile(block_pattern, re.DOTALL)
@@ -343,10 +345,31 @@ def _replace_block_child(
     if not child_match:
         raise ConfigurationError(f"missing <{child}> in {description} block")
     current = child_match.group(2).strip()
-    if current not in allowed:
+    valid = allowed(current) if callable(allowed) else current in allowed
+    if not valid:
         raise ConfigurationError(f"unexpected {description} <{child}> value: {current!r}")
     replacement = block[: child_match.start()] + child_match.group(1) + value + child_match.group(3) + block[child_match.end() :]
     return text[: block_match.start()] + replacement + text[block_match.end() :]
+
+
+def _valid_rule_test_threads(value: str) -> bool:
+    if value == "auto":
+        return True
+    return value.isdigit() and 1 <= int(value) <= 128
+
+
+def _valid_rule_test_max_sessions(value: str) -> bool:
+    return value.isdigit() and 1 <= int(value) <= 500
+
+
+def _valid_rule_test_session_timeout(value: str) -> bool:
+    match = re.fullmatch(r"([1-9]\d*)([smhd])", value)
+    if not match:
+        return False
+    amount = int(match.group(1))
+    unit = match.group(2)
+    multiplier = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    return amount * multiplier <= 365 * 86400
 
 
 def _render_ossec_config(original: str) -> str:
@@ -413,7 +436,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "threads",
         "auto",
-        {"auto", "1", "2", "4", "8", "16"},
+        _valid_rule_test_threads,
         "rule_test",
     )
     text = _replace_block_child(
@@ -421,7 +444,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "max_sessions",
         "500",
-        {str(i) for i in range(1, 10001)},
+        _valid_rule_test_max_sessions,
         "rule_test",
     )
     return _replace_block_child(
@@ -429,7 +452,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "session_timeout",
         "1m",
-        {"1m", "5m", "10m", "15m", "30m", "1h"},
+        _valid_rule_test_session_timeout,
         "rule_test",
     )
 
@@ -514,10 +537,6 @@ def _plan_adoption(
     source: Path,
     target: Path,
 ) -> AdoptionPlan:
-    target_entries = _tree_entries(runner, target)
-    if not target_entries:
-        return AdoptionPlan((), ())
-
     source_entries = _tree_entries(runner, source)
     for relative, kind in source_entries.items():
         if kind == "l":
@@ -528,6 +547,10 @@ def _plan_adoption(
             raise ConfigurationError(
                 f"unsupported workspace content under {source}: {relative}"
             )
+
+    target_entries = _tree_entries(runner, target)
+    if not target_entries:
+        return AdoptionPlan((), ())
 
     copies: list[tuple[Path, Path]] = []
     for relative, kind in target_entries.items():
@@ -724,11 +747,22 @@ def configure_permissions(runner: CommandRunner, workspace: Path) -> None:
         runner.run(["find", str(path), "-type", "f", "-exec", "chmod", "0660", "{}", "+"], privileged=True)
 
 
-def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
+def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> bool:
+    if user.uid == 0:
+        return False
     groups = runner.capture(["id", "-nG", user.name]).split()
-    if "wazuh" not in groups:
-        runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
-        LOG.warning("Added %s to wazuh group; a new login shell may be required outside wazuhdevenv", user.name)
+    if "wazuh" in groups:
+        return False
+    runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
+    LOG.warning(
+        "Added %s to wazuh group; a new login shell may be required outside wazuhdevenv",
+        user.name,
+    )
+    return True
+
+
+def remove_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
+    runner.run(["gpasswd", "-d", user.name, "wazuh"], privileged=True)
 
 
 def _service_manager() -> str:
@@ -737,6 +771,28 @@ def _service_manager() -> str:
     if shutil.which("service"):
         return "sysv"
     raise UnsupportedPlatformError("supported service manager not found (systemd or service)")
+
+
+def is_wazuh_enabled(runner: CommandRunner) -> bool | None:
+    manager = _service_manager()
+    if manager != "systemd":
+        return None
+    return (
+        runner.run(
+            ["systemctl", "is-enabled", "--quiet", "wazuh-manager"],
+            privileged=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def set_wazuh_enabled(runner: CommandRunner, enabled: bool) -> None:
+    manager = _service_manager()
+    if manager != "systemd":
+        return
+    action = "enable" if enabled else "disable"
+    runner.run(["systemctl", action, "wazuh-manager"], privileged=True)
 
 
 def is_wazuh_active(runner: CommandRunner) -> bool:
@@ -782,11 +838,12 @@ def validate_wazuh(runner: CommandRunner) -> None:
         runner.run([executable, "-t"], privileged=True)
 
 
-def start_wazuh(runner: CommandRunner) -> None:
+def start_wazuh(runner: CommandRunner, *, enable: bool = True) -> None:
     manager = _service_manager()
     if manager == "systemd":
         runner.run(["systemctl", "daemon-reload"], privileged=True)
-        runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
+        if enable:
+            runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
         runner.run(["systemctl", "restart", "wazuh-manager"], privileged=True)
     else:
         runner.run(["service", "wazuh-manager", "restart"], privileged=True)
@@ -913,6 +970,7 @@ def _capture_snapshot(
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
         fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
         preexisting_mounts=frozenset(preexisting_mounts),
+        service_was_enabled=is_wazuh_enabled(runner),
         workspace_metadata=_capture_workspace_metadata(runner, workspace),
     )
 
@@ -932,8 +990,15 @@ def _rollback_provisioning(
     workspace: Path,
     snapshot: ProvisioningSnapshot,
     mutations: WorkspaceMutations,
+    user: InvokingUser,
+    group_added: bool,
 ) -> None:
     recovery_errors: list[str] = []
+
+    try:
+        stop_wazuh(runner)
+    except Exception as exc:
+        recovery_errors.append(f"stop Wazuh Manager before rollback: {exc}")
 
     for name in reversed(("rules", "decoders")):
         source = (workspace / name).resolve()
@@ -960,10 +1025,22 @@ def _rollback_provisioning(
 
     if snapshot.service_was_active:
         try:
-            start_wazuh(runner)
+            start_wazuh(runner, enable=False)
             wait_for_logtest(runner)
         except Exception as exc:
             recovery_errors.append(f"restart Wazuh Manager: {exc}")
+
+    if snapshot.service_was_enabled is not None:
+        try:
+            set_wazuh_enabled(runner, snapshot.service_was_enabled)
+        except Exception as exc:
+            recovery_errors.append(f"restore Wazuh Manager enablement: {exc}")
+
+    if group_added:
+        try:
+            remove_group_membership(runner, user)
+        except Exception as exc:
+            recovery_errors.append(f"remove {user.name} from wazuh group: {exc}")
 
     if recovery_errors:
         LOG.error(
@@ -996,11 +1073,12 @@ def initialize(
     # Validate every known configuration transformation before the service is stopped.
     _render_ossec_config(snapshot.ossec_conf)
     _render_windows_rule_testing(snapshot.windows_rules)
-    ensure_group_membership(runner, user)
 
     mutations = WorkspaceMutations()
-    stop_wazuh(runner)
+    group_added = False
     try:
+        group_added = ensure_group_membership(runner, user)
+        stop_wazuh(runner)
         configure_ossec(runner)
         configure_windows_rule_testing(runner)
         configure_bind_mounts(
@@ -1013,7 +1091,14 @@ def initialize(
         start_wazuh(runner)
         wait_for_logtest(runner)
     except Exception:
-        _rollback_provisioning(runner, workspace, snapshot, mutations)
+        _rollback_provisioning(
+            runner,
+            workspace,
+            snapshot,
+            mutations,
+            user,
+            group_added,
+        )
         raise
 
     state = load_state(home)
