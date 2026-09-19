@@ -87,7 +87,7 @@ def test_failed_state_write_rolls_back_tests_and_manifest(
         "corpus_version": "4.14-r1",
         "wazuh": {"requires": ">=4.14.7,<4.15.0"},
         "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": ">=0.1,<0.2"},
+        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
     }
     archive_path = tmp_path / "corpus.zip"
     with zipfile.ZipFile(archive_path, "w") as archive:
