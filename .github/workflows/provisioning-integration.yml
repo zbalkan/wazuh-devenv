@@ -16,11 +16,14 @@ jobs:
   init-idempotence:
     runs-on: ubuntu-latest
     env:
-      WAZUHDEVENV_HOME: ${{ runner.temp }}/wazuhdevenv-state
       WAZUHTESTER_SPEC: "wazuhtester @ git+https://github.com/zbalkan/wazuhtester@main"
-      WORKSPACE: ${{ runner.temp }}/wazuh-workspace
 
     steps:
+      - name: Configure temporary paths
+        run: |
+          echo "WAZUHDEVENV_HOME=$RUNNER_TEMP/wazuhdevenv-state" >> "$GITHUB_ENV"
+          echo "WORKSPACE=$RUNNER_TEMP/wazuh-workspace" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
