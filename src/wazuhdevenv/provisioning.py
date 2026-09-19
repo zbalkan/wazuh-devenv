@@ -804,8 +804,8 @@ def initialize(
 ) -> str:
     ensure_linux()
     state = load_state(home)
-    existing_workspace = state.get("workspace")
-    if isinstance(existing_workspace, str):
+    if "workspace" in state:
+        existing_workspace = state["workspace"]
         raise ConfigurationError(
             "wazuh-devenv is already initialized; 'init' may only be run once. "
             f"Workspace: {existing_workspace}; "
