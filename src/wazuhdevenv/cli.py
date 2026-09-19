@@ -124,7 +124,7 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
 
 
 def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
-    with managed_lock(home, user):
+    with managed_lock(home):
         version = _installed_wazuh_version(user, home)
         tester_version = _workspace_wazuhtester_version(user, home)
         if args.check:

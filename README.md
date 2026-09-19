@@ -125,10 +125,9 @@ Tool-managed state defaults to:
 ```text
 ~/.wazuhdevenv/
 ├── state.json
-├── corpus-manifest.json
-├── tests/
+├── current-corpus -> corpora/<active-release>/
 ├── cache/
-├── staging/
+├── corpora/
 └── logs/
 ```
 
@@ -155,8 +154,8 @@ wazuhdevenv update
 5. verifies the digest;
 6. rejects unsafe ZIP paths, symlinks, and special files;
 7. validates that the external and embedded manifests match;
-8. extracts into staging;
-9. atomically activates the selected corpus;
+8. extracts into a new versioned corpus directory;
+9. atomically repoints `current-corpus` to the selected corpus;
 10. records the active corpus in `state.json`.
 
 Check what would be selected without modifying state:
