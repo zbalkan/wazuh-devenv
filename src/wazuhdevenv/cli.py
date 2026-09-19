@@ -121,8 +121,8 @@ def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) ->
     with managed_lock(home, user):
         version = _installed_wazuh_version(user, home)
         tester_version = _workspace_wazuhtester_version(user, home)
-        release = resolve_release(version, tester_version)
         if args.check:
+            release = resolve_release(version, tester_version)
             print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
             return 0
         installed = update_corpus(home, version, tester_version, user)

@@ -32,25 +32,42 @@ def test_update_command_passes_invoking_user_to_managed_lock(
         yield
 
     release = CorpusRelease(
-        manifest={"wazuh": {"requires": "==4.14.8"}},
+        manifest={
+            "schema_version": 1,
+            "corpus_version": "4.14.8-r1",
+            "wazuh": {"requires": "==4.14.8"},
+        },
         manifest_url="manifest",
         archive_url="archive",
         checksum_url="checksum",
     )
-    object.__setattr__(release, "manifest", {
-        "schema_version": 1,
-        "corpus_version": "4.14.8-r1",
-        "wazuh": {"requires": "==4.14.8"},
-    })
+    resolve_calls: list[tuple[str, str]] = []
+    update_calls: list[tuple[Path, str, str, InvokingUser]] = []
 
     monkeypatch.setattr(cli, "managed_lock", fake_lock)
     monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.8")
     monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
-    monkeypatch.setattr(cli, "resolve_release", lambda *args: release)
-    monkeypatch.setattr(cli, "update_corpus", lambda *args: "4.14.8-r1")
+    monkeypatch.setattr(
+        cli,
+        "resolve_release",
+        lambda version, tester: resolve_calls.append((version, tester)) or release,
+    )
+    monkeypatch.setattr(
+        cli,
+        "update_corpus",
+        lambda path, version, tester, owner: (
+            update_calls.append((path, version, tester, owner)) or "4.14.8-r1"
+        ),
+    )
 
     assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
     assert lock_calls == [(home, user)]
+    if check:
+        assert resolve_calls == [("4.14.8", "0.1.0rc1")]
+        assert update_calls == []
+    else:
+        assert resolve_calls == []
+        assert update_calls == [(home, "4.14.8", "0.1.0rc1", user)]
 
 
 
