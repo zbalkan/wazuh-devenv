@@ -828,5 +828,5 @@ def initialize(
             "wazuh_version": installed,
         }
     )
-    save_state(home, state, user)
+    save_state(home, state)
     return installed
