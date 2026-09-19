@@ -147,12 +147,36 @@ class PackageManager:
 
     def ensure_system_dependencies(self) -> None:
         if self.family == "apt":
-            self._apt_install(
-                ["python3-venv", "util-linux", "coreutils", "findutils", "gnupg", "apt-transport-https"]
-            )
-        else:
+            packages = [
+                "python3-venv",
+                "util-linux",
+                "coreutils",
+                "findutils",
+                "gnupg",
+                "apt-transport-https",
+            ]
+            missing = [
+                package
+                for package in packages
+                if self.runner.run(
+                    ["dpkg-query", "-W", package],
+                    check=False,
+                ).returncode
+                != 0
+            ]
+            if missing:
+                self._apt_install(missing)
+            return
+
+        packages = ["python3", "util-linux", "coreutils", "findutils", "gnupg2"]
+        missing = [
+            package
+            for package in packages
+            if self.runner.run(["rpm", "-q", package], check=False).returncode != 0
+        ]
+        if missing:
             self.runner.run(
-                [self.command, "-y", "install", "python3", "util-linux", "coreutils", "findutils", "gnupg2"],
+                [self.command, "-y", "install", *missing],
                 privileged=True,
             )
 
