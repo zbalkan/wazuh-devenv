@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import CommandError, ConfigurationError, UnsupportedPlatformError
@@ -104,33 +104,13 @@ def _download(url: str) -> Path:
 
 
 @dataclass(frozen=True)
-class WorkspaceMetadata:
-    path: Path
-    mode: str
-    uid: int
-    gid: int
-
-
-@dataclass
-class WorkspaceMutations:
-    copied_files: list[Path] = field(default_factory=list)
-    created_directories: list[Path] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class AdoptionPlan:
-    copies: tuple[tuple[Path, Path], ...]
-    directories: tuple[Path, ...]
-
-
-@dataclass(frozen=True)
 class ProvisioningSnapshot:
     service_was_active: bool
+    service_was_enabled: bool | None
     ossec_conf: str
     windows_rules: str
     fstab: str
     preexisting_mounts: frozenset[Path]
-    workspace_metadata: tuple[WorkspaceMetadata, ...] = ()
 
 
 class PackageManager:
@@ -222,23 +202,22 @@ class PackageManager:
     def _setup_apt_repository(self) -> None:
         self._apt_install(["gnupg", "apt-transport-https"])
         keyring = Path("/usr/share/keyrings/wazuh.gpg")
-        if not keyring.exists():
-            key = _download("https://packages.wazuh.com/key/GPG-KEY-WAZUH")
-            try:
-                self.runner.run(
-                    [
-                        "gpg",
-                        "--no-default-keyring",
-                        "--keyring",
-                        "gnupg-ring:/usr/share/keyrings/wazuh.gpg",
-                        "--import",
-                        str(key),
-                    ],
-                    privileged=True,
-                )
-                self.runner.run(["chmod", "0644", str(keyring)], privileged=True)
-            finally:
-                key.unlink(missing_ok=True)
+        key = _download("https://packages.wazuh.com/key/GPG-KEY-WAZUH")
+        try:
+            self.runner.run(
+                [
+                    "gpg",
+                    "--no-default-keyring",
+                    "--keyring",
+                    "gnupg-ring:/usr/share/keyrings/wazuh.gpg",
+                    "--import",
+                    str(key),
+                ],
+                privileged=True,
+            )
+            self.runner.run(["chmod", "0644", str(keyring)], privileged=True)
+        finally:
+            key.unlink(missing_ok=True)
 
         _write_privileged(
             self.runner,
@@ -259,7 +238,6 @@ gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
 enabled=1
 name=EL-$releasever - Wazuh
 baseurl=https://packages.wazuh.com/4.x/yum/
-priority=1
 """
         _write_privileged(self.runner, Path("/etc/yum.repos.d/wazuh.repo"), repo)
 
@@ -330,7 +308,7 @@ def _replace_block_child(
     block_pattern: str,
     child: str,
     value: str,
-    allowed: set[str],
+    allowed: set[str] | None,
     description: str,
 ) -> str:
     block_re = re.compile(block_pattern, re.DOTALL)
@@ -343,7 +321,7 @@ def _replace_block_child(
     if not child_match:
         raise ConfigurationError(f"missing <{child}> in {description} block")
     current = child_match.group(2).strip()
-    if current not in allowed:
+    if allowed is not None and current not in allowed:
         raise ConfigurationError(f"unexpected {description} <{child}> value: {current!r}")
     replacement = block[: child_match.start()] + child_match.group(1) + value + child_match.group(3) + block[child_match.end() :]
     return text[: block_match.start()] + replacement + text[block_match.end() :]
@@ -413,7 +391,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "threads",
         "auto",
-        {"auto", "1", "2", "4", "8", "16"},
+        None,
         "rule_test",
     )
     text = _replace_block_child(
@@ -421,7 +399,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "max_sessions",
         "500",
-        {str(i) for i in range(1, 10001)},
+        None,
         "rule_test",
     )
     return _replace_block_child(
@@ -429,7 +407,7 @@ def _render_ossec_config(original: str) -> str:
         r"<rule_test>.*?</rule_test>",
         "session_timeout",
         "1m",
-        {"1m", "5m", "10m", "15m", "30m", "1h"},
+        None,
         "rule_test",
     )
 
@@ -470,153 +448,42 @@ def configure_windows_rule_testing(runner: CommandRunner) -> None:
 
 
 def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
-    created_workspace = not workspace.exists()
+    del user
     workspace.mkdir(parents=True, exist_ok=True)
-    if created_workspace and os.geteuid() == 0 and user.uid != 0:
-        os.chown(workspace, user.uid, user.gid)
 
     for name in ("rules", "decoders", "tests"):
         path = workspace / name
         if path.is_symlink():
             raise ConfigurationError(f"workspace {name} path is a symlink: {path}")
         path.mkdir(exist_ok=True)
-        if os.geteuid() == 0 and user.uid != 0:
-            os.chown(path, user.uid, user.gid)
 
 
-def _tree_entries(runner: CommandRunner, path: Path) -> dict[str, str]:
+def _wazuh_directory_entries(runner: CommandRunner, target: Path) -> list[str]:
     output = runner.capture(
-        ["find", str(path), "-mindepth", "1", "-printf", "%y\t%P\n"],
+        ["find", str(target), "-mindepth", "1", "-maxdepth", "1", "-printf", "%f\n"],
         privileged=True,
     )
-    entries: dict[str, str] = {}
-    for line in output.splitlines():
-        if not line:
-            continue
-        try:
-            kind, relative = line.split("\t", 1)
-        except ValueError as exc:
-            raise ConfigurationError(f"cannot inspect filesystem content under {path}") from exc
-        entries[relative] = kind
-    return entries
+    return [line for line in output.splitlines() if line]
 
 
-def _path_sha256(runner: CommandRunner, path: Path) -> str:
-    output = runner.capture(["sha256sum", str(path)], privileged=True).strip()
-    digest = output.split(maxsplit=1)[0] if output else ""
-    if not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
-        raise ConfigurationError(f"cannot determine SHA-256 for {path}")
-    return digest.lower()
-
-
-def _plan_adoption(
-    runner: CommandRunner,
-    source: Path,
-    target: Path,
-) -> AdoptionPlan:
-    target_entries = _tree_entries(runner, target)
-    if not target_entries:
-        return AdoptionPlan((), ())
-
-    source_entries = _tree_entries(runner, source)
-    for relative, kind in source_entries.items():
-        if kind == "l":
-            raise ConfigurationError(
-                f"workspace content must not contain symlinks: {source / relative}"
-            )
-        if kind not in {"d", "f"}:
-            raise ConfigurationError(
-                f"unsupported workspace content under {source}: {relative}"
-            )
-
-    copies: list[tuple[Path, Path]] = []
-    for relative, kind in target_entries.items():
-        target_entry = target / relative
-        source_entry = source / relative
-        source_kind = source_entries.get(relative)
-
-        if (target.name, relative) in DISPOSABLE_WAZUH_SAMPLES:
-            continue
-
-        if kind == "d":
-            if source_kind is not None and source_kind != "d":
-                raise ConfigurationError(
-                    f"cannot adopt {target_entry}: workspace path is not a directory"
-                )
-            continue
-        if kind != "f":
-            raise ConfigurationError(
-                f"unsupported existing Wazuh content under {target}: {relative}"
-            )
-
-        target_digest = _path_sha256(runner, target_entry)
-
-        if source_kind is not None:
-            if source_kind != "f":
-                raise ConfigurationError(
-                    f"cannot adopt {target_entry}: workspace path is not a regular file"
-                )
-            source_digest = _path_sha256(runner, source_entry)
-            if source_digest == target_digest:
-                continue
-            raise ConfigurationError(
-                f"conflicting existing Wazuh content: {target_entry} and {source_entry}"
-            )
-
-        parent = Path(relative).parent
-        while parent != Path("."):
-            parent_kind = source_entries.get(parent.as_posix())
-            if parent_kind is not None and parent_kind != "d":
-                raise ConfigurationError(
-                    f"cannot adopt {target_entry}: workspace parent is not a directory"
-                )
-            parent = parent.parent
-
-        copies.append((target_entry, source_entry))
-
-    directories: set[Path] = set()
-    for _, source_entry in copies:
-        parent = source_entry.parent
-        while parent != source:
-            relative_parent = parent.relative_to(source).as_posix()
-            if relative_parent not in source_entries:
-                directories.add(parent)
-            parent = parent.parent
-
-    return AdoptionPlan(
-        tuple(copies),
-        tuple(sorted(directories, key=lambda path: len(path.parts))),
-    )
-
-
-def _apply_adoption(
-    runner: CommandRunner,
-    plan: AdoptionPlan,
-    mutations: WorkspaceMutations | None = None,
-) -> None:
-    for directory in plan.directories:
-        runner.run(["mkdir", "-p", str(directory)], privileged=True)
-        if mutations is not None and directory not in mutations.created_directories:
-            mutations.created_directories.append(directory)
-
-    for target_entry, source_entry in plan.copies:
-        runner.run(
-            ["cp", "--preserve=mode,timestamps", str(target_entry), str(source_entry)],
-            privileged=True,
+def _require_default_wazuh_content(runner: CommandRunner, target: Path) -> None:
+    allowed = {
+        name
+        for directory, name in DISPOSABLE_WAZUH_SAMPLES
+        if directory == target.name
+    }
+    unexpected = [
+        name
+        for name in _wazuh_directory_entries(runner, target)
+        if name not in allowed
+    ]
+    if unexpected:
+        listed = ", ".join(sorted(unexpected))
+        raise ConfigurationError(
+            f"existing custom Wazuh content under {target}: {listed}. "
+            "wazuhdevenv expects a fresh/default development installation; "
+            "move custom content manually before running init"
         )
-        if mutations is not None:
-            mutations.copied_files.append(source_entry)
-
-
-def _adopt_existing(
-    runner: CommandRunner,
-    source: Path,
-    target: Path,
-    *,
-    mutations: WorkspaceMutations | None = None,
-) -> None:
-    plan = _plan_adoption(runner, source, target)
-    _apply_adoption(runner, plan, mutations)
 
 
 def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
@@ -680,7 +547,7 @@ def preflight_bind_mounts(
                     f"{target} is already a mount point for different content"
                 )
         else:
-            _plan_adoption(runner, source, target)
+            _require_default_wazuh_content(runner, target)
 
         _fstab_has_entry(runner, source, target)
 
@@ -688,29 +555,34 @@ def preflight_bind_mounts(
 def configure_bind_mounts(
     runner: CommandRunner,
     workspace: Path,
-    *,
-    mutations: WorkspaceMutations | None = None,
 ) -> None:
     for name in ("rules", "decoders"):
         source = (workspace / name).resolve()
         target = WAZUH_HOME / "etc" / name
         if any(ch.isspace() for ch in str(source)):
-            raise ConfigurationError(f"workspace path contains whitespace and cannot be persisted safely: {source}")
+            raise ConfigurationError(
+                f"workspace path contains whitespace and cannot be persisted safely: {source}"
+            )
 
-        if runner.run(["mountpoint", "-q", str(target)], privileged=True, check=False).returncode == 0:
+        if runner.run(
+            ["mountpoint", "-q", str(target)],
+            privileged=True,
+            check=False,
+        ).returncode == 0:
             if _same_bind_mount(runner, source, target):
                 _ensure_fstab(runner, source, target)
                 continue
-            raise ConfigurationError(f"{target} is already a mount point for different content")
+            raise ConfigurationError(
+                f"{target} is already a mount point for different content"
+            )
 
-        _adopt_existing(
-            runner,
-            source,
-            target,
-            mutations=mutations,
-        )
+        _require_default_wazuh_content(runner, target)
         runner.run(["mount", "--bind", str(source), str(target)], privileged=True)
-        if runner.run(["mountpoint", "-q", str(target)], privileged=True, check=False).returncode != 0:
+        if runner.run(
+            ["mountpoint", "-q", str(target)],
+            privileged=True,
+            check=False,
+        ).returncode != 0:
             raise ConfigurationError(f"bind mount failed: {source} -> {target}")
         _ensure_fstab(runner, source, target)
 
@@ -723,12 +595,15 @@ def configure_permissions(runner: CommandRunner, workspace: Path) -> None:
         runner.run(["find", str(path), "-type", "f", "-exec", "chown", "wazuh:wazuh", "{}", "+"], privileged=True)
         runner.run(["find", str(path), "-type", "f", "-exec", "chmod", "0660", "{}", "+"], privileged=True)
 
-
 def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
-    groups = runner.capture(["id", "-nG", user.name]).split()
-    if "wazuh" not in groups:
-        runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
-        LOG.warning("Added %s to wazuh group; a new login shell may be required outside wazuhdevenv", user.name)
+    groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
+    if "wazuh" in groups:
+        return
+    runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
+    LOG.warning(
+        "Added %s to wazuh group; a new login shell may be required outside wazuhdevenv",
+        user.name,
+    )
 
 
 def _service_manager() -> str:
@@ -760,6 +635,19 @@ def is_wazuh_active(runner: CommandRunner) -> bool:
     )
 
 
+def is_wazuh_enabled(runner: CommandRunner) -> bool | None:
+    if _service_manager() != "systemd":
+        return None
+    return (
+        runner.run(
+            ["systemctl", "is-enabled", "--quiet", "wazuh-manager"],
+            privileged=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 def stop_wazuh(runner: CommandRunner) -> bool:
     was_active = is_wazuh_active(runner)
     if not was_active:
@@ -782,11 +670,14 @@ def validate_wazuh(runner: CommandRunner) -> None:
         runner.run([executable, "-t"], privileged=True)
 
 
-def start_wazuh(runner: CommandRunner) -> None:
+def start_wazuh(runner: CommandRunner, *, enable: bool | None = True) -> None:
     manager = _service_manager()
     if manager == "systemd":
         runner.run(["systemctl", "daemon-reload"], privileged=True)
-        runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
+        if enable is True:
+            runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
+        elif enable is False:
+            runner.run(["systemctl", "disable", "wazuh-manager"], privileged=True)
         runner.run(["systemctl", "restart", "wazuh-manager"], privileged=True)
     else:
         runner.run(["service", "wazuh-manager", "restart"], privileged=True)
@@ -826,79 +717,11 @@ def ensure_workspace_venv(runner: CommandRunner, workspace: Path) -> None:
     runner.run_as_user([str(python), "-m", "pip", "install", "pytest>=8,<10", tester_spec])
 
 
-def _capture_workspace_metadata(
-    runner: CommandRunner,
-    workspace: Path,
-) -> tuple[WorkspaceMetadata, ...]:
-    metadata: list[WorkspaceMetadata] = []
-    for name in ("rules", "decoders"):
-        root = workspace / name
-        output = runner.capture(
-            [
-                "find",
-                str(root),
-                "-mindepth",
-                "0",
-                "-printf",
-                "%m\t%U\t%G\t%p\n",
-            ],
-            privileged=True,
-        )
-        for line in output.splitlines():
-            if not line:
-                continue
-            try:
-                mode, uid, gid, path = line.split("\t", 3)
-                metadata.append(
-                    WorkspaceMetadata(Path(path), mode, int(uid), int(gid))
-                )
-            except (ValueError, TypeError) as exc:
-                raise ConfigurationError(
-                    f"cannot snapshot workspace metadata under {root}"
-                ) from exc
-    return tuple(metadata)
-
-
-def _restore_workspace(
-    runner: CommandRunner,
-    snapshot: ProvisioningSnapshot,
-    mutations: WorkspaceMutations,
-) -> list[str]:
-    errors: list[str] = []
-
-    for path in reversed(mutations.copied_files):
-        try:
-            runner.run(["rm", "-f", "--", str(path)], privileged=True)
-        except Exception as exc:
-            errors.append(f"remove adopted file {path}: {exc}")
-
-    for path in sorted(
-        mutations.created_directories,
-        key=lambda item: len(item.parts),
-        reverse=True,
-    ):
-        try:
-            runner.run(["rmdir", "--", str(path)], privileged=True, check=False)
-        except Exception as exc:
-            errors.append(f"remove adopted directory {path}: {exc}")
-
-    for entry in snapshot.workspace_metadata:
-        try:
-            runner.run(
-                ["chown", f"{entry.uid}:{entry.gid}", str(entry.path)],
-                privileged=True,
-            )
-            runner.run(["chmod", entry.mode, str(entry.path)], privileged=True)
-        except Exception as exc:
-            errors.append(f"restore workspace metadata {entry.path}: {exc}")
-
-    return errors
-
-
 def _capture_snapshot(
     runner: CommandRunner,
     workspace: Path,
     service_was_active: bool,
+    service_was_enabled: bool | None,
 ) -> ProvisioningSnapshot:
     preexisting_mounts: set[Path] = set()
     for name in ("rules", "decoders"):
@@ -909,11 +732,11 @@ def _capture_snapshot(
 
     return ProvisioningSnapshot(
         service_was_active=service_was_active,
+        service_was_enabled=service_was_enabled,
         ossec_conf=runner.capture(["cat", str(OSSEC_CONF)], privileged=True),
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
         fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
         preexisting_mounts=frozenset(preexisting_mounts),
-        workspace_metadata=_capture_workspace_metadata(runner, workspace),
     )
 
 
@@ -931,7 +754,6 @@ def _rollback_provisioning(
     runner: CommandRunner,
     workspace: Path,
     snapshot: ProvisioningSnapshot,
-    mutations: WorkspaceMutations,
 ) -> None:
     recovery_errors: list[str] = []
 
@@ -946,8 +768,6 @@ def _rollback_provisioning(
         except Exception as exc:
             recovery_errors.append(f"unmount {target}: {exc}")
 
-    recovery_errors.extend(_restore_workspace(runner, snapshot, mutations))
-
     for path, original in (
         (Path("/etc/fstab"), snapshot.fstab),
         (OSSEC_CONF, snapshot.ossec_conf),
@@ -958,12 +778,20 @@ def _rollback_provisioning(
         except Exception as exc:
             recovery_errors.append(f"restore {path}: {exc}")
 
-    if snapshot.service_was_active:
-        try:
-            start_wazuh(runner)
+    try:
+        if snapshot.service_was_active:
+            start_wazuh(runner, enable=snapshot.service_was_enabled)
             wait_for_logtest(runner)
-        except Exception as exc:
-            recovery_errors.append(f"restart Wazuh Manager: {exc}")
+        else:
+            stop_wazuh(runner)
+            if snapshot.service_was_enabled is not None and _service_manager() == "systemd":
+                action = "enable" if snapshot.service_was_enabled else "disable"
+                runner.run(
+                    ["systemctl", action, "wazuh-manager"],
+                    privileged=True,
+                )
+    except Exception as exc:
+        recovery_errors.append(f"restore Wazuh Manager service state: {exc}")
 
     if recovery_errors:
         LOG.error(
@@ -982,8 +810,10 @@ def initialize(
     ensure_linux()
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
+    state = load_state(home)
 
     package_manager.ensure_system_dependencies()
+    _service_manager()
     prepare_workspace(workspace, user)
     ensure_workspace_venv(runner, workspace)
 
@@ -991,32 +821,18 @@ def initialize(
 
     preflight_bind_mounts(runner, workspace)
     service_was_active = is_wazuh_active(runner)
-    snapshot = _capture_snapshot(runner, workspace, service_was_active)
+    service_was_enabled = is_wazuh_enabled(runner)
+    snapshot = _capture_snapshot(
+        runner,
+        workspace,
+        service_was_active,
+        service_was_enabled,
+    )
 
-    # Validate every known configuration transformation before the service is stopped.
+    # Refuse unexpected file structure before stopping Wazuh.
     _render_ossec_config(snapshot.ossec_conf)
     _render_windows_rule_testing(snapshot.windows_rules)
-    ensure_group_membership(runner, user)
 
-    mutations = WorkspaceMutations()
-    stop_wazuh(runner)
-    try:
-        configure_ossec(runner)
-        configure_windows_rule_testing(runner)
-        configure_bind_mounts(
-            runner,
-            workspace,
-            mutations=mutations,
-        )
-        configure_permissions(runner, workspace)
-        validate_wazuh(runner)
-        start_wazuh(runner)
-        wait_for_logtest(runner)
-    except Exception:
-        _rollback_provisioning(runner, workspace, snapshot, mutations)
-        raise
-
-    state = load_state(home)
     state.update(
         {
             "workspace": str(workspace),
@@ -1024,5 +840,20 @@ def initialize(
             "wazuh_version": installed,
         }
     )
-    save_state(home, state, user)
+
+    try:
+        ensure_group_membership(runner, user)
+        stop_wazuh(runner)
+        configure_ossec(runner)
+        configure_windows_rule_testing(runner)
+        configure_bind_mounts(runner, workspace)
+        configure_permissions(runner, workspace)
+        validate_wazuh(runner)
+        start_wazuh(runner)
+        wait_for_logtest(runner)
+        save_state(home, state)
+    except Exception:
+        _rollback_provisioning(runner, workspace, snapshot)
+        raise
+
     return installed

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .corpus import resolve_release, update_corpus
-from .errors import ConfigurationError, WazuhDevenvError
+from .errors import ConfigurationError, CorpusError, WazuhDevenvError
 from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
@@ -45,7 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
+def _configure_logging(home: Path, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     log_path = home / "logs" / "wazuhdevenv.log"
@@ -58,8 +58,6 @@ def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
         raise
 
     try:
-        if os.geteuid() == 0 and user.uid != 0:
-            os.fchown(fd, user.uid, user.gid)
         stream = os.fdopen(fd, "a", encoding="utf-8")
     except Exception:
         os.close(fd)
@@ -80,7 +78,7 @@ def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:
     runner = CommandRunner(user)
     code = "from importlib.metadata import version; print(version('wazuhtester'))"
     try:
-        return runner.capture([str(python), "-c", code]).strip()
+        return runner.capture_as_user([str(python), "-c", code]).strip()
     except WazuhDevenvError as exc:
         raise WazuhDevenvError(
             "wazuhtester is not installed in the workspace virtual environment; rerun 'wazuhdevenv init'"
@@ -101,7 +99,7 @@ def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
 
 def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     workspace = resolve_workspace(args.path)
-    with managed_lock(home, user):
+    with managed_lock(home):
         LOG.info("Provisioning workspace: %s", workspace)
         version = initialize(
             workspace,
@@ -112,20 +110,28 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
         LOG.info("Wazuh Manager ready: %s", version)
         if not args.skip_corpus:
             tester_version = _workspace_wazuhtester_version(user, home)
-            corpus = update_corpus(home, version, tester_version, user)
-            LOG.info("Managed rule-test corpus ready: %s", corpus)
+            try:
+                corpus = update_corpus(home, version, tester_version)
+            except CorpusError as exc:
+                LOG.warning(
+                    "Wazuh is ready, but the default rule-test corpus could not be installed: %s. "
+                    "Run 'wazuhdevenv update' later.",
+                    exc,
+                )
+            else:
+                LOG.info("Managed rule-test corpus ready: %s", corpus)
     return 0
 
 
 def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
-    with managed_lock(home, user):
+    with managed_lock(home):
         version = _installed_wazuh_version(user, home)
         tester_version = _workspace_wazuhtester_version(user, home)
         if args.check:
             release = resolve_release(version, tester_version)
             print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
             return 0
-        installed = update_corpus(home, version, tester_version, user)
+        installed = update_corpus(home, version, tester_version)
         LOG.info("Managed rule-test corpus ready: %s", installed)
     return 0
 
@@ -135,10 +141,15 @@ def main(argv: list[str] | None = None) -> int:
     logging_ready = False
 
     try:
+        if os.geteuid() == 0:
+            raise ConfigurationError(
+                "run wazuhdevenv as the developer, not as root; "
+                "the tool invokes sudo only for system changes"
+            )
         user = InvokingUser.current()
         home = managed_home(user)
-        ensure_managed_home(home, user)
-        _configure_logging(home, user, args.verbose)
+        ensure_managed_home(home)
+        _configure_logging(home, args.verbose)
         logging_ready = True
 
         if args.command == "init":

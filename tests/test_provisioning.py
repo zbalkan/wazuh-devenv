@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import os
-import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,45 +9,20 @@ import pytest
 import wazuhdevenv.provisioning as provisioning
 from wazuhdevenv.errors import ConfigurationError
 from wazuhdevenv.paths import InvokingUser
-from wazuhdevenv.provisioning import (
-    PackageManager,
-    ProvisioningSnapshot,
-    WorkspaceMutations,
-    _plan_adoption,
-    _adopt_existing,
-    _normalize_wazuh_version,
-    _replace_block_child,
-    _replace_simple_tag,
-)
+from wazuhdevenv.provisioning import PackageManager, ProvisioningSnapshot
 
 
-class LocalRunner:
-    def __init__(self) -> None:
+class RecordingRunner:
+    def __init__(self, *, find_output: str = "") -> None:
+        self.find_output = find_output
         self.commands: list[list[str]] = []
-        self.privileged_captures: list[list[str]] = []
+        self.find_targets: list[Path] = []
 
     def capture(self, args: list[str], *, privileged: bool = False) -> str:
-        if privileged:
-            self.privileged_captures.append(args)
+        del privileged
         if args[0] == "find":
-            root = Path(args[1])
-            rows: list[str] = []
-            for path in sorted(root.rglob("*")):
-                relative = path.relative_to(root).as_posix()
-                if path.is_symlink():
-                    kind = "l"
-                elif path.is_dir():
-                    kind = "d"
-                elif path.is_file():
-                    kind = "f"
-                else:
-                    kind = "?"
-                rows.append(f"{kind}\t{relative}")
-            return "\n".join(rows) + ("\n" if rows else "")
-        if args[0] == "sha256sum":
-            path = Path(args[1])
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            return f"{digest}  {path}\n"
+            self.find_targets.append(Path(args[1]))
+            return self.find_output
         raise AssertionError(f"unexpected capture command: {args}")
 
     def run(
@@ -61,286 +34,7 @@ class LocalRunner:
     ) -> SimpleNamespace:
         del privileged, check
         self.commands.append(args)
-        if args[0] == "mkdir":
-            Path(args[-1]).mkdir(parents=True, exist_ok=True)
-        elif args[0] == "cp":
-            shutil.copy2(args[-2], args[-1])
-        elif args[0] == "rm":
-            Path(args[-1]).unlink(missing_ok=True)
-        elif args[0] == "rmdir":
-            try:
-                Path(args[-1]).rmdir()
-            except OSError:
-                pass
         return SimpleNamespace(returncode=0)
-
-
-def test_replace_simple_tag_is_idempotent() -> None:
-    source = "<logall_json>no</logall_json>"
-    changed = _replace_simple_tag(source, "logall_json", "yes", {"yes", "no"})
-    assert changed == "<logall_json>yes</logall_json>"
-    assert _replace_simple_tag(changed, "logall_json", "yes", {"yes", "no"}) == changed
-
-
-def test_replace_simple_tag_rejects_unknown_state() -> None:
-    with pytest.raises(ConfigurationError):
-        _replace_simple_tag("<logall_json>maybe</logall_json>", "logall_json", "yes", {"yes", "no"})
-
-
-def test_replace_block_child_changes_only_selected_block() -> None:
-    source = """<rootcheck>
-  <disabled>no</disabled>
-</rootcheck>
-<syscheck>
-  <disabled>no</disabled>
-</syscheck>
-"""
-    changed = _replace_block_child(
-        source,
-        r"<rootcheck>.*?</rootcheck>",
-        "disabled",
-        "yes",
-        {"yes", "no"},
-        "rootcheck",
-    )
-    assert "<rootcheck>\n  <disabled>yes</disabled>" in changed
-    assert "<syscheck>\n  <disabled>no</disabled>" in changed
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("4.14.8", "4.14.8"),
-        ("4.14.8-1", "4.14.8"),
-        ("1:4.14.8-1", "4.14.8"),
-        ("wazuh-manager-4.14.8-1.x86_64", "4.14.8"),
-    ],
-)
-def test_normalize_wazuh_version(value: str, expected: str) -> None:
-    assert _normalize_wazuh_version(value) == expected
-
-
-def test_normalize_wazuh_version_rejects_invalid_value() -> None:
-    with pytest.raises(ConfigurationError):
-        _normalize_wazuh_version("not-a-version")
-
-
-def test_wazuh_local_rules_sample_is_never_adopted(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (target / "local_rules.xml").write_text(
-        "arbitrary upstream sample content\n",
-        encoding="utf-8",
-    )
-
-    _adopt_existing(runner, source, target)
-
-    assert not (source / "local_rules.xml").exists()
-    assert not any(command[0] == "cp" for command in runner.commands)
-
-
-def test_workspace_local_rules_always_wins_over_wazuh_sample(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (source / "local_rules.xml").write_text("workspace rule\n", encoding="utf-8")
-    (target / "local_rules.xml").write_text(
-        "different upstream sample\n",
-        encoding="utf-8",
-    )
-
-    _adopt_existing(runner, source, target)
-
-    assert (source / "local_rules.xml").read_text(encoding="utf-8") == "workspace rule\n"
-    assert not any(command[0] == "cp" for command in runner.commands)
-
-
-def test_wazuh_local_decoder_sample_is_never_adopted(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/decoders"
-    target = tmp_path / "wazuh/decoders"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (target / "local_decoder.xml").write_text(
-        "arbitrary upstream decoder sample\n",
-        encoding="utf-8",
-    )
-
-    _adopt_existing(runner, source, target)
-
-    assert not (source / "local_decoder.xml").exists()
-    assert not any(command[0] == "cp" for command in runner.commands)
-
-
-def test_custom_wazuh_file_is_copied_into_empty_workspace(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (target / "custom.xml").write_text("<group name=\"custom,\"/>\n", encoding="utf-8")
-
-    _adopt_existing(runner, source, target)
-
-    assert (source / "custom.xml").read_text(encoding="utf-8") == '<group name="custom,"/>\n'
-    assert (target / "custom.xml").is_file()
-
-
-def test_adoption_fails_before_copying_when_later_file_conflicts(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-
-    (target / "a.xml").write_text("adopt me\n", encoding="utf-8")
-    (target / "b.xml").write_text("target version\n", encoding="utf-8")
-    (source / "b.xml").write_text("workspace version\n", encoding="utf-8")
-
-    with pytest.raises(ConfigurationError, match="conflicting existing Wazuh content"):
-        _adopt_existing(runner, source, target)
-
-    assert not (source / "a.xml").exists()
-    assert not any(command[0] == "cp" for command in runner.commands)
-
-
-def test_initialize_rolls_back_after_post_stop_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[str] = []
-    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
-    snapshot = ProvisioningSnapshot(
-        service_was_active=True,
-        ossec_conf="original",
-        windows_rules="original",
-        fstab="original",
-        preexisting_mounts=frozenset(),
-        workspace_metadata=(),
-    )
-
-    class FakePackageManager:
-        def __init__(self, runner: object) -> None:
-            del runner
-
-        def ensure_system_dependencies(self) -> None:
-            events.append("dependencies")
-
-        def install_wazuh(self, requested_version: str | None) -> str:
-            del requested_version
-            events.append("install")
-            return "4.14.8"
-
-    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
-    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
-    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
-    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: events.append("workspace"))
-    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: events.append("venv"))
-    monkeypatch.setattr(
-        provisioning,
-        "preflight_bind_mounts",
-        lambda *args, **kwargs: events.append("preflight"),
-    )
-    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: True)
-    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: snapshot)
-    monkeypatch.setattr(
-        provisioning,
-        "_render_ossec_config",
-        lambda value: value,
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "_render_windows_rule_testing",
-        lambda value: value,
-    )
-    monkeypatch.setattr(provisioning, "stop_wazuh", lambda runner: events.append("stop") or True)
-    monkeypatch.setattr(provisioning, "configure_ossec", lambda runner: events.append("ossec"))
-    monkeypatch.setattr(
-        provisioning,
-        "configure_windows_rule_testing",
-        lambda runner: events.append("windows"),
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "configure_bind_mounts",
-        lambda *args, **kwargs: events.append("mounts"),
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "configure_permissions",
-        lambda *args: events.append("permissions"),
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "ensure_group_membership",
-        lambda *args: events.append("group"),
-    )
-
-    def fail_validation(runner: object) -> None:
-        del runner
-        events.append("validate")
-        raise ConfigurationError("invalid configuration")
-
-    monkeypatch.setattr(provisioning, "validate_wazuh", fail_validation)
-    monkeypatch.setattr(
-        provisioning,
-        "_rollback_provisioning",
-        lambda *args: events.append("rollback"),
-    )
-
-    with pytest.raises(ConfigurationError, match="invalid configuration"):
-        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
-
-    assert events[-2:] == ["validate", "rollback"]
-    assert events.index("stop") < events.index("permissions") < events.index("validate")
-
-
-
-def test_adoption_inspects_workspace_through_privileged_runner(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (source / "custom.xml").write_text("same\n", encoding="utf-8")
-    (target / "custom.xml").write_text("same\n", encoding="utf-8")
-
-    _adopt_existing(runner, source, target)
-
-    source_commands = [
-        command
-        for command in runner.privileged_captures
-        if any(str(source) in argument for argument in command)
-    ]
-    assert source_commands
-    assert any(command[0] == "find" for command in source_commands)
-    assert any(command[0] == "sha256sum" for command in source_commands)
-
-
-def test_prepare_workspace_chowns_new_root_when_invoked_as_root(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "new-workspace"
-    user = InvokingUser("test", 1234, 5678, tmp_path)
-    calls: list[tuple[Path, int, int]] = []
-
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    monkeypatch.setattr(
-        os,
-        "chown",
-        lambda path, uid, gid: calls.append((Path(path), uid, gid)),
-    )
-
-    provisioning.prepare_workspace(workspace, user)
-
-    assert (workspace, 1234, 5678) in calls
-
 
 
 class DpkgRunner:
@@ -364,6 +58,218 @@ def _apt_manager(runner: object) -> PackageManager:
     manager.family = "apt"
     manager.command = "apt-get"
     return manager
+
+
+def _snapshot(
+    active: bool = False,
+    enabled: bool | None = None,
+) -> ProvisioningSnapshot:
+    return ProvisioningSnapshot(
+        service_was_active=active,
+        service_was_enabled=enabled,
+        ossec_conf="original ossec",
+        windows_rules="original windows",
+        fstab="original fstab",
+        preexisting_mounts=frozenset(),
+    )
+
+
+def test_replace_simple_tag_is_idempotent() -> None:
+    source = "<logall_json>no</logall_json>"
+    changed = provisioning._replace_simple_tag(
+        source,
+        "logall_json",
+        "yes",
+        {"yes", "no"},
+    )
+    assert changed == "<logall_json>yes</logall_json>"
+    assert (
+        provisioning._replace_simple_tag(
+            changed,
+            "logall_json",
+            "yes",
+            {"yes", "no"},
+        )
+        == changed
+    )
+
+
+def test_replace_simple_tag_rejects_unknown_state() -> None:
+    with pytest.raises(ConfigurationError, match="unexpected <logall_json>"):
+        provisioning._replace_simple_tag(
+            "<logall_json>maybe</logall_json>",
+            "logall_json",
+            "yes",
+            {"yes", "no"},
+        )
+
+
+def test_rule_test_values_are_overwritten_without_reimplementing_wazuh_validation() -> None:
+    text = """
+<rule_test>
+  <threads>unexpected</threads>
+  <max_sessions>not-a-number</max_sessions>
+  <session_timeout>whatever</session_timeout>
+</rule_test>
+"""
+    text = provisioning._replace_block_child(
+        text,
+        r"<rule_test>.*?</rule_test>",
+        "threads",
+        "auto",
+        None,
+        "rule_test",
+    )
+    text = provisioning._replace_block_child(
+        text,
+        r"<rule_test>.*?</rule_test>",
+        "max_sessions",
+        "500",
+        None,
+        "rule_test",
+    )
+    text = provisioning._replace_block_child(
+        text,
+        r"<rule_test>.*?</rule_test>",
+        "session_timeout",
+        "1m",
+        None,
+        "rule_test",
+    )
+
+    assert "<threads>auto</threads>" in text
+    assert "<max_sessions>500</max_sessions>" in text
+    assert "<session_timeout>1m</session_timeout>" in text
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("4.14.8-1", "4.14.8"),
+        ("wazuh-manager-4.14.10", "4.14.10"),
+    ],
+)
+def test_normalize_wazuh_version(value: str, expected: str) -> None:
+    assert provisioning._normalize_wazuh_version(value) == expected
+
+
+def test_normalize_wazuh_version_rejects_invalid_value() -> None:
+    with pytest.raises(ConfigurationError, match="cannot determine Wazuh version"):
+        provisioning._normalize_wazuh_version("unknown")
+
+
+def test_windows_rule_testing_transforms_only_known_default() -> None:
+    changed = provisioning._render_windows_rule_testing(
+        f"prefix\n{provisioning.WINDOWS_RULE_DEFAULT}\nsuffix"
+    )
+
+    assert provisioning.WINDOWS_RULE_EXPECTED in changed
+    assert provisioning.WINDOWS_RULE_DEFAULT not in changed
+
+
+def test_windows_rule_testing_rejects_unknown_rule_state() -> None:
+    with pytest.raises(ConfigurationError, match="rule 60000 is in an unexpected state"):
+        provisioning._render_windows_rule_testing("<rule id=\"60000\">different</rule>")
+
+
+@pytest.mark.parametrize(
+    ("target_name", "find_output"),
+    [
+        ("rules", ""),
+        ("rules", "local_rules.xml\n"),
+        ("decoders", ""),
+        ("decoders", "local_decoder.xml\n"),
+    ],
+)
+def test_default_wazuh_content_is_accepted(
+    tmp_path: Path,
+    target_name: str,
+    find_output: str,
+) -> None:
+    runner = RecordingRunner(find_output=find_output)
+
+    target = tmp_path / target_name
+    provisioning._require_default_wazuh_content(
+        runner,
+        target,
+    )
+
+    assert runner.find_targets == [target]
+
+
+@pytest.mark.parametrize(
+    ("target_name", "find_output"),
+    [
+        ("rules", "custom.xml\n"),
+        ("rules", "local_rules.xml\ncustom.xml\n"),
+        ("decoders", "custom.xml\n"),
+        ("decoders", "subdir\n"),
+    ],
+)
+def test_existing_custom_wazuh_content_is_rejected(
+    tmp_path: Path,
+    target_name: str,
+    find_output: str,
+) -> None:
+    runner = RecordingRunner(find_output=find_output)
+
+    with pytest.raises(
+        ConfigurationError,
+        match="expects a fresh/default development installation",
+    ):
+        target = tmp_path / target_name
+        provisioning._require_default_wazuh_content(
+            runner,
+            target,
+        )
+
+    assert runner.find_targets == [target]
+
+
+def test_configure_bind_mounts_checks_wazuh_directories_before_mounting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, Path]] = []
+    mounted: set[Path] = set()
+
+    class BindRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del privileged, check
+            if args[:2] == ["mountpoint", "-q"]:
+                return SimpleNamespace(returncode=0 if Path(args[2]) in mounted else 1)
+            if args[:2] == ["mount", "--bind"]:
+                target = Path(args[3])
+                events.append(("mount", target))
+                mounted.add(target)
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+    def require_default(runner: object, target: Path) -> None:
+        del runner
+        events.append(("check", target))
+
+    monkeypatch.setattr(provisioning, "_require_default_wazuh_content", require_default)
+    monkeypatch.setattr(provisioning, "_ensure_fstab", lambda *args: None)
+
+    provisioning.configure_bind_mounts(BindRunner(), tmp_path / "workspace")
+
+    expected = [
+        provisioning.WAZUH_HOME / "etc/rules",
+        provisioning.WAZUH_HOME / "etc/decoders",
+    ]
+    assert events == [
+        ("check", expected[0]),
+        ("mount", expected[0]),
+        ("check", expected[1]),
+        ("mount", expected[1]),
+    ]
 
 
 def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
@@ -408,45 +314,272 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
+def test_group_membership_is_added_only_when_needed() -> None:
+    class GroupRunner:
+        def __init__(self, groups: str) -> None:
+            self.groups = groups
+            self.commands: list[list[str]] = []
 
-def test_adoption_plan_does_not_mutate_workspace(tmp_path: Path) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    target = tmp_path / "wazuh/rules"
-    source.mkdir(parents=True)
-    target.mkdir(parents=True)
-    (target / "custom.xml").write_text("target\n", encoding="utf-8")
+        def capture(self, args: list[str], **kwargs: object) -> str:
+            del args, kwargs
+            return self.groups
 
-    plan = _plan_adoption(runner, source, target)
+        def run(self, args: list[str], **kwargs: object) -> SimpleNamespace:
+            del kwargs
+            self.commands.append(args)
+            return SimpleNamespace(returncode=0)
 
-    assert len(plan.copies) == 1
-    assert not (source / "custom.xml").exists()
-    assert not any(command[0] == "cp" for command in runner.commands)
+    user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
+    existing = GroupRunner("tester wazuh")
+    missing = GroupRunner("tester")
+
+    provisioning.ensure_group_membership(existing, user)
+    provisioning.ensure_group_membership(missing, user)
+
+    assert existing.commands == []
+    assert missing.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
 
 
-def test_restore_workspace_removes_adopted_files_and_restores_metadata(
+def test_initialize_checks_service_manager_before_install(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = LocalRunner()
-    source = tmp_path / "workspace/rules"
-    source.mkdir(parents=True)
-    copied = source / "adopted.xml"
-    copied.write_text("adopted\n", encoding="utf-8")
-    snapshot = ProvisioningSnapshot(
-        service_was_active=False,
-        ossec_conf="",
-        windows_rules="",
-        fstab="",
-        preexisting_mounts=frozenset(),
-        workspace_metadata=(
-            provisioning.WorkspaceMetadata(source, "755", os.getuid(), os.getgid()),
-        ),
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            events.append("dependencies")
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            events.append("install")
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: events.append("linux"))
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: events.append("service") or "systemd")
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: events.append("workspace"))
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: events.append("venv"))
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: events.append("preflight"))
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: events.append("group"))
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: events.append("stop") or False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: events.append("ossec"))
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: events.append("windows"))
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: events.append("mounts"))
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: events.append("permissions"))
+    monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: events.append("validate"))
+    monkeypatch.setattr(provisioning, "start_wazuh", lambda *args: events.append("start"))
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: events.append("ready"))
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(provisioning, "save_state", lambda *args: events.append("state"))
+
+    assert provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user) == "4.14.8"
+
+    assert events.index("dependencies") < events.index("service") < events.index("install")
+    assert events.index("validate") < events.index("start") < events.index("ready")
+    assert events[-1] == "state"
+
+
+def test_failed_host_configuration_uses_small_rollback_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            pass
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: None)
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: None)
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+
+    def fail_validation(*args: object) -> None:
+        raise ConfigurationError("invalid configuration")
+
+    monkeypatch.setattr(provisioning, "validate_wazuh", fail_validation)
+    monkeypatch.setattr(
+        provisioning,
+        "_rollback_provisioning",
+        lambda *args: events.append("rollback"),
     )
-    mutations = WorkspaceMutations(copied_files=[copied])
 
-    errors = provisioning._restore_workspace(runner, snapshot, mutations)
+    with pytest.raises(ConfigurationError, match="invalid configuration"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
 
-    assert errors == []
-    assert not copied.exists()
-    assert any(command[0] == "chown" for command in runner.commands)
-    assert any(command[0] == "chmod" for command in runner.commands)
+    assert events == ["rollback"]
+
+
+def test_rollback_restores_only_system_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir(parents=True)
+    restored: list[Path] = []
+
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: True)
+    monkeypatch.setattr(
+        provisioning,
+        "_restore_text_if_changed",
+        lambda runner, path, original: restored.append(path),
+    )
+
+    provisioning._rollback_provisioning(
+        runner,
+        workspace,
+        _snapshot(active=False),
+    )
+
+    assert ["umount", "/var/ossec/etc/decoders"] in runner.commands
+    assert ["umount", "/var/ossec/etc/rules"] in runner.commands
+    assert restored == [
+        Path("/etc/fstab"),
+        provisioning.OSSEC_CONF,
+        provisioning.WINDOWS_RULES,
+    ]
+
+def test_rollback_restores_active_but_disabled_systemd_service(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir(parents=True)
+
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: False)
+    monkeypatch.setattr(provisioning, "_restore_text_if_changed", lambda *args: None)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+
+    provisioning._rollback_provisioning(
+        runner,
+        workspace,
+        _snapshot(active=True, enabled=False),
+    )
+
+    assert ["systemctl", "disable", "wazuh-manager"] in runner.commands
+    assert ["systemctl", "restart", "wazuh-manager"] in runner.commands
+
+
+def test_initialize_rolls_back_when_state_persistence_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            pass
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: None)
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: None)
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: None)
+    monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+    monkeypatch.setattr(
+        provisioning,
+        "save_state",
+        lambda *args: (_ for _ in ()).throw(OSError("state write failed")),
+    )
+    monkeypatch.setattr(
+        provisioning,
+        "_rollback_provisioning",
+        lambda *args: events.append("rollback"),
+    )
+
+    with pytest.raises(OSError, match="state write failed"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == ["rollback"]
+
+
+def test_initialize_rejects_malformed_state_before_host_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            events.append("dependencies")
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(
+        provisioning,
+        "load_state",
+        lambda *args: (_ for _ in ()).throw(ValueError("unsupported state file")),
+    )
+
+    with pytest.raises(ValueError, match="unsupported state file"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == []
+

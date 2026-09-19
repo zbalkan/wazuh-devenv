@@ -35,6 +35,7 @@
             ]
         },
         {
+            // Open a pytest test module before launching; ${file} is the active editor file.
             "name": "Current pytest file",
             "type": "debugpy",
             "request": "launch",

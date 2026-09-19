@@ -18,7 +18,14 @@ The tooling is deliberately separated by responsibility:
 
 ## Installation
 
-For CLI use, install `wazuh-devenv` with an isolated application installer:
+For CLI use, install `wazuh-devenv` with an isolated application installer.
+Before the first PyPI release, install the current `main` branch directly:
+
+```bash
+pipx install "git+https://github.com/zbalkan/wazuh-devenv.git@main"
+```
+
+After the package is published to PyPI, the stable installation command will be:
 
 ```bash
 pipx install wazuh-devenv
@@ -61,16 +68,16 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - disables unnecessary manager modules used by the old development profile;
 - configures the Wazuh `rule_test` service for development throughput;
 - applies the known rule-60000 Windows EventChannel testing transformation;
-- preflights existing Wazuh rule/decoder content without mutating the workspace, treats Wazuh's `local_rules.xml` and `local_decoder.xml` as disposable installation samples, copies other non-conflicting local content during the protected apply phase, and fails closed on genuine filename/content conflicts;
+- expects a fresh/default Wazuh rules/decoders installation, ignores Wazuh's disposable `local_rules.xml` and `local_decoder.xml` samples, and refuses to migrate other existing custom content;
 - bind-mounts workspace rules and decoders into `/var/ossec/etc`;
 - persists the mounts in `/etc/fstab`;
 - configures ownership and permissions;
 - adds the invoking user to the `wazuh` group when required;
 - validates Wazuh configuration using Wazuh's own `-t` checks;
-- snapshots the service/configuration/mount state plus workspace ownership and modes before stopping Wazuh, and rolls back system changes, adopted content, and workspace metadata if provisioning fails;
+- backs up and restores the Wazuh configuration, Windows testing rule, fstab entries, and newly created bind mounts if host configuration fails;
 - starts the manager and waits for a stable logtest socket;
 - initializes `~/.wazuhdevenv`;
-- downloads the compatible default rule-test corpus.
+- attempts to download the compatible default rule-test corpus; corpus download failure does not make an otherwise working Wazuh development environment fail initialization.
 
 The CLI is intended to be run as the developer:
 
@@ -78,7 +85,7 @@ The CLI is intended to be run as the developer:
 wazuhdevenv init
 ```
 
-It invokes `sudo` only for operations that require system privileges.
+It invokes `sudo` only for operations that require system privileges. Do not run the CLI itself with `sudo` or as root.
 
 To require an exact Wazuh version:
 
@@ -118,10 +125,9 @@ Tool-managed state defaults to:
 ```text
 ~/.wazuhdevenv/
 ├── state.json
-├── corpus-manifest.json
-├── tests/
+├── current-corpus -> corpora/<active-release>/
 ├── cache/
-├── staging/
+├── corpora/
 └── logs/
 ```
 
@@ -148,8 +154,8 @@ wazuhdevenv update
 5. verifies the digest;
 6. rejects unsafe ZIP paths, symlinks, and special files;
 7. validates that the external and embedded manifests match;
-8. extracts into staging;
-9. atomically activates `~/.wazuhdevenv/tests`;
+8. extracts into a new versioned corpus directory;
+9. atomically repoints `current-corpus` to the selected corpus;
 10. records the active corpus in `state.json`.
 
 Check what would be selected without modifying state:
