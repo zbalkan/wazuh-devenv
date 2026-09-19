@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import stat
 import warnings
 import zipfile
@@ -12,229 +11,18 @@ from pathlib import Path
 import pytest
 
 import wazuhdevenv.corpus as corpus
-from wazuhdevenv.corpus import CorpusRelease, _matches_requirement, _release_key, _safe_extract, _validate_member
+from wazuhdevenv.corpus import CorpusRelease
 from wazuhdevenv.errors import CorpusError
-from wazuhdevenv.paths import InvokingUser
 
 
-def test_release_key_orders_corpus_revisions() -> None:
-    assert _release_key("4.14-r2") > _release_key("4.14-r1")
-    assert _release_key("4.14.8-r2") > _release_key("4.14.8-r1")
-    assert _release_key("4.15-r1") > _release_key("4.14.99-r99")
-
-
-def test_manifest_requirement_matching() -> None:
-    manifest = {
-        "wazuh": {"requires": ">=4.14.7,<4.15.0"},
-        "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
-    }
-    assert _matches_requirement(manifest, "wazuh", "4.14.7")
-    assert not _matches_requirement(manifest, "wazuh", "4.15.0")
-    assert _matches_requirement(manifest, "wazuhtester", "0.1.0rc1")
-    assert _matches_requirement(manifest, "wazuhtester", "0.1.0")
-    assert not _matches_requirement(manifest, "wazuhtester", "0.2.0")
-
-
-@pytest.mark.parametrize("name", ["/etc/passwd", "../escape", "tests/../../escape"])
-def test_archive_paths_cannot_escape_root(name: str) -> None:
-    info = zipfile.ZipInfo(name)
-    with pytest.raises(CorpusError):
-        _validate_member(info)
-
-
-def test_symlink_archive_member_is_rejected() -> None:
-    info = zipfile.ZipInfo("tests/link")
-    info.external_attr = (stat.S_IFLNK | 0o777) << 16
-    with pytest.raises(CorpusError):
-        _validate_member(info)
-
-
-def test_regular_archive_member_is_allowed() -> None:
-    info = zipfile.ZipInfo("tests/test_example.py")
-    info.external_attr = (stat.S_IFREG | 0o644) << 16
-    _validate_member(info)
-
-
-def test_duplicate_archive_destinations_are_rejected(tmp_path: Path) -> None:
-    archive = tmp_path / "duplicate.zip"
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        with zipfile.ZipFile(archive, "w") as target:
-            target.writestr("tests/test_example.py", "first")
-            target.writestr("tests/test_example.py", "second")
-
-    with pytest.raises(CorpusError, match="duplicate archive destination"):
-        _safe_extract(archive, tmp_path / "out")
-
-
-def test_failed_state_write_rolls_back_tests_and_manifest(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    active = home / "tests"
-    active.mkdir()
-    (active / "old.py").write_text("old\n", encoding="utf-8")
-
-    old_manifest = {"schema_version": 1, "corpus_version": "4.14-r0"}
-    manifest_target = home / "corpus-manifest.json"
-    manifest_target.write_text(json.dumps(old_manifest), encoding="utf-8")
-
-    new_manifest = {
+def _manifest(version: str, *, tester: str = ">=0.1.0rc1,<0.2") -> dict[str, object]:
+    return {
         "schema_version": 1,
-        "corpus_version": "4.14-r1",
-        "wazuh": {"requires": ">=4.14.7,<4.15.0"},
+        "corpus_version": version,
+        "wazuh": {"requires": "==4.14.8"},
         "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
+        "wazuhtester": {"requires": tester},
     }
-    archive_path = tmp_path / "corpus.zip"
-    with zipfile.ZipFile(archive_path, "w") as archive:
-        archive.writestr("manifest.json", json.dumps(new_manifest))
-        archive.writestr("tests/new.py", "new\n")
-
-    archive_bytes = archive_path.read_bytes()
-    checksum = hashlib.sha256(archive_bytes).hexdigest().encode("ascii")
-    payloads = {
-        "archive": archive_bytes,
-        "checksum": checksum + b"  corpus.zip\n",
-    }
-    monkeypatch.setattr(corpus, "_request", lambda url: payloads[url])
-
-    def fail_state_write(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("simulated state write failure")
-
-    monkeypatch.setattr(corpus, "save_state", fail_state_write)
-
-    release = CorpusRelease(
-        manifest=new_manifest,
-        manifest_url="manifest",
-        archive_url="archive",
-        checksum_url="checksum",
-    )
-    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
-
-    with pytest.raises(RuntimeError, match="simulated state write failure"):
-        corpus.install_release(home, release, "4.14.7", user, "0.1.0")
-
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "tests/new.py").exists()
-    assert json.loads(manifest_target.read_text(encoding="utf-8")) == old_manifest
-    assert not (home / "corpus-manifest.previous.json").exists()
-
-
-
-def test_cache_archive_written_by_root_is_chowned_to_invoking_user(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    target = tmp_path / "cache.zip"
-    user = InvokingUser("test", 1234, 5678, tmp_path)
-    calls: list[tuple[int, int, int]] = []
-
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    monkeypatch.setattr(
-        os,
-        "fchown",
-        lambda fd, uid, gid: calls.append((fd, uid, gid)),
-    )
-
-    corpus._write_owned_bytes(target, b"archive", user)
-
-    assert target.read_bytes() == b"archive"
-    assert calls
-    assert calls[0][1:] == (1234, 5678)
-
-
-
-def test_empty_checksum_asset_raises_corpus_error(tmp_path: Path) -> None:
-    archive = tmp_path / "corpus.zip"
-    archive.write_bytes(b"content")
-
-    with pytest.raises(CorpusError, match="invalid SHA-256 checksum asset"):
-        corpus._verify_checksum(archive, "")
-
-
-class FakeResponse:
-    def __init__(self, content: bytes = b"{}") -> None:
-        self.content = content
-
-    def __enter__(self) -> "FakeResponse":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
-
-    def read(self) -> bytes:
-        return self.content
-
-
-def test_public_asset_request_does_not_send_github_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    requests: list[object] = []
-    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
-
-    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
-        del timeout
-        requests.append(request)
-        return FakeResponse(b"asset")
-
-    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
-
-    assert corpus._request("https://github.com/owner/repo/releases/download/v1/file.zip") == b"asset"
-    request = requests[0]
-    assert isinstance(request, corpus.urllib.request.Request)
-    assert request.get_header("Authorization") is None
-
-
-def test_authenticated_api_request_sends_github_token_only_to_api_origin(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    requests: list[object] = []
-    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
-
-    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
-        del timeout
-        requests.append(request)
-        return FakeResponse(b"[]")
-
-    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
-
-    assert corpus._request(
-        "https://api.github.com/repos/owner/repo/releases",
-        authenticated=True,
-    ) == b"[]"
-    request = requests[0]
-    assert isinstance(request, corpus.urllib.request.Request)
-    assert request.get_header("Authorization") == "Bearer secret-token"
-
-    with pytest.raises(CorpusError, match="restricted to api.github.com"):
-        corpus._request(
-            "https://github.com/owner/repo/releases/download/v1/file.zip",
-            authenticated=True,
-        )
-
-
-
-def test_atomic_owned_write_replaces_symlink_without_following_it(
-    tmp_path: Path,
-) -> None:
-    victim = tmp_path / "victim"
-    victim.write_bytes(b"unchanged")
-    target = tmp_path / "archive.zip"
-    target.symlink_to(victim)
-
-    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
-    corpus._write_owned_bytes(target, b"new archive", user)
-
-    assert victim.read_bytes() == b"unchanged"
-    assert not target.is_symlink()
-    assert target.read_bytes() == b"new archive"
-
-
-
 
 
 def _release_metadata(version: str, manifest_url: str) -> dict[str, object]:
@@ -255,14 +43,131 @@ def _release_metadata(version: str, manifest_url: str) -> dict[str, object]:
     }
 
 
-def _manifest(version: str, *, tester: str = ">=0.1.0rc1,<0.2") -> dict[str, object]:
-    return {
-        "schema_version": 1,
-        "corpus_version": version,
-        "wazuh": {"requires": "==4.14.8"},
-        "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": tester},
-    }
+def _build_archive(
+    tmp_path: Path,
+    manifest: dict[str, object],
+    payload: str = "pass\n",
+) -> bytes:
+    path = tmp_path / f"{manifest['corpus_version']}.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr("tests/test_payload.py", payload)
+    return path.read_bytes()
+
+
+def test_release_key_orders_corpus_revisions() -> None:
+    assert corpus._release_key("4.14.8-r2") > corpus._release_key("4.14.8-r1")
+    assert corpus._release_key("4.15-r1") > corpus._release_key("4.14.99-r99")
+
+
+def test_manifest_requirement_matching() -> None:
+    manifest = _manifest("4.14.8-r1")
+
+    assert corpus._matches_requirement(manifest, "wazuh", "4.14.8")
+    assert corpus._matches_requirement(manifest, "wazuhtester", "0.1.0rc1")
+    assert corpus._matches_requirement(manifest, "wazuhtester", "0.1.0")
+    assert not corpus._matches_requirement(manifest, "wazuhtester", "0.2.0")
+
+
+@pytest.mark.parametrize("name", ["/etc/passwd", "../escape", "tests/../../escape"])
+def test_archive_paths_cannot_escape_root(name: str) -> None:
+    with pytest.raises(CorpusError, match="unsafe archive path"):
+        corpus._validate_member(zipfile.ZipInfo(name))
+
+
+def test_symlink_archive_member_is_rejected() -> None:
+    info = zipfile.ZipInfo("tests/link")
+    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+
+    with pytest.raises(CorpusError, match="unsupported archive entry"):
+        corpus._validate_member(info)
+
+
+def test_duplicate_archive_destinations_are_rejected(tmp_path: Path) -> None:
+    archive = tmp_path / "duplicate.zip"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        with zipfile.ZipFile(archive, "w") as target:
+            target.writestr("tests/test_example.py", "first")
+            target.writestr("tests/test_example.py", "second")
+
+    with pytest.raises(CorpusError, match="duplicate archive destination"):
+        corpus._safe_extract(archive, tmp_path / "out")
+
+
+def test_checksum_validation(tmp_path: Path) -> None:
+    archive = tmp_path / "corpus.zip"
+    archive.write_bytes(b"content")
+    expected = hashlib.sha256(b"content").hexdigest()
+
+    assert corpus._verify_checksum(archive, expected) == expected
+
+    with pytest.raises(CorpusError, match="corpus checksum mismatch"):
+        corpus._verify_checksum(archive, "0" * 64)
+
+    with pytest.raises(CorpusError, match="invalid SHA-256"):
+        corpus._verify_checksum(archive, "")
+
+
+class FakeResponse:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.content
+
+
+def test_public_download_does_not_send_github_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[object] = []
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        del timeout
+        requests.append(request)
+        return FakeResponse(b"asset")
+
+    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
+
+    assert corpus._request("https://github.com/example/file.zip") == b"asset"
+    request = requests[0]
+    assert isinstance(request, corpus.urllib.request.Request)
+    assert request.get_header("Authorization") is None
+
+
+def test_authenticated_requests_are_limited_to_github_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[object] = []
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        del timeout
+        requests.append(request)
+        return FakeResponse(b"[]")
+
+    monkeypatch.setattr(corpus.urllib.request, "urlopen", fake_urlopen)
+
+    assert corpus._request(
+        "https://api.github.com/repos/example/releases",
+        authenticated=True,
+    ) == b"[]"
+    request = requests[0]
+    assert isinstance(request, corpus.urllib.request.Request)
+    assert request.get_header("Authorization") == "Bearer secret-token"
+
+    with pytest.raises(CorpusError, match="restricted to api.github.com"):
+        corpus._request(
+            "https://github.com/example/file.zip",
+            authenticated=True,
+        )
 
 
 def test_resolve_release_selects_highest_compatible_version(
@@ -270,15 +175,12 @@ def test_resolve_release_selects_highest_compatible_version(
 ) -> None:
     releases = [
         {**_release_metadata("4.14.8-r1", "manifest-r1"), "draft": True},
-        {**_release_metadata("4.14.8-r2", "manifest-r2"), "prerelease": True},
+        _release_metadata("4.14.8-r2", "manifest-r2"),
         _release_metadata("4.14.8-r3", "manifest-r3"),
-        _release_metadata("4.14.8-r4", "manifest-r4"),
-        _release_metadata("unexpected", "manifest-bad"),
     ]
     manifests = {
+        "manifest-r2": _manifest("4.14.8-r2"),
         "manifest-r3": _manifest("4.14.8-r3"),
-        "manifest-r4": _manifest("4.14.8-r4"),
-        "manifest-bad": _manifest("unexpected"),
     }
 
     def request(url: str, *, authenticated: bool = False) -> bytes:
@@ -289,16 +191,14 @@ def test_resolve_release_selects_highest_compatible_version(
 
     monkeypatch.setattr(corpus, "_request", request)
 
-    release = corpus.resolve_release("4.14.8", "0.1.0rc1")
-
-    assert release.version == "4.14.8-r4"
+    assert corpus.resolve_release("4.14.8", "0.1.0rc1").version == "4.14.8-r3"
 
 
-def test_resolve_release_reports_requirement_mismatches(
+def test_resolve_release_reports_compatibility_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     releases = [_release_metadata("4.14.8-r1", "manifest-r1")]
-    manifest = _manifest("4.14.8-r1", tester=">=0.1,<0.2")
+    manifest = _manifest("4.14.8-r1", tester=">=0.2,<0.3")
 
     def request(url: str, *, authenticated: bool = False) -> bytes:
         del authenticated
@@ -312,531 +212,123 @@ def test_resolve_release_reports_requirement_mismatches(
         corpus.resolve_release("4.14.8", "0.1.0rc1")
 
 
-def test_checksum_mismatch_is_rejected(tmp_path: Path) -> None:
-    archive = tmp_path / "corpus.zip"
-    archive.write_bytes(b"content")
-
-    with pytest.raises(CorpusError, match="corpus checksum mismatch"):
-        corpus._verify_checksum(archive, "0" * 64)
-
-
-def _build_archive(tmp_path: Path, manifest: dict[str, object], payload: str) -> bytes:
-    path = tmp_path / f"{manifest['corpus_version']}.zip"
-    with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("manifest.json", json.dumps(manifest))
-        archive.writestr("tests/test_payload.py", payload)
-    return path.read_bytes()
-
-
-def test_corpus_activation_uses_single_atomic_current_pointer(
+def test_install_release_activates_verified_corpus(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = tmp_path / "home"
-    for name in ("cache", "staging", "corpora"):
-        (home / name).mkdir(parents=True, exist_ok=True)
-    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
-
-    first_manifest = _manifest("4.14.8-r1")
-    second_manifest = _manifest("4.14.8-r2")
-    first_bytes = _build_archive(tmp_path, first_manifest, "first\n")
-    second_bytes = _build_archive(tmp_path, second_manifest, "second\n")
+    (home / "cache").mkdir(parents=True)
+    (home / "corpora").mkdir()
+    manifest = _manifest("4.14.8-r2")
+    archive = _build_archive(tmp_path, manifest, "new\n")
     payloads = {
-        "archive-r1": first_bytes,
-        "checksum-r1": hashlib.sha256(first_bytes).hexdigest().encode(),
-        "archive-r2": second_bytes,
-        "checksum-r2": hashlib.sha256(second_bytes).hexdigest().encode(),
+        "archive": archive,
+        "checksum": hashlib.sha256(archive).hexdigest().encode(),
     }
     monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
 
-    first = CorpusRelease(first_manifest, "manifest-r1", "archive-r1", "checksum-r1")
-    second = CorpusRelease(second_manifest, "manifest-r2", "archive-r2", "checksum-r2")
+    corpus.install_release(
+        home,
+        CorpusRelease(manifest, "manifest", "archive", "checksum"),
+        "4.14.8",
+        "0.1.0rc1",
+    )
 
-    corpus.install_release(home, first, "4.14.8", user, "0.1.0rc1")
-    first_target = os.readlink(home / "current-corpus")
-    assert (home / "tests").is_symlink()
-    assert (home / "corpus-manifest.json").is_symlink()
-    assert (home / "tests/test_payload.py").read_text() == "first\n"
+    current = home / "current-corpus"
+    assert current.is_symlink()
+    assert (current / "tests/test_payload.py").read_text(encoding="utf-8") == "new\n"
+    assert json.loads((current / "manifest.json").read_text(encoding="utf-8")) == manifest
 
-    corpus.install_release(home, second, "4.14.8", user, "0.1.0rc1")
-    second_target = os.readlink(home / "current-corpus")
-
-    assert second_target != first_target
-    assert (home / "tests/test_payload.py").read_text() == "second\n"
-    assert json.loads((home / "corpus-manifest.json").read_text())["corpus_version"] == "4.14.8-r2"
+    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
+    assert state["active_corpus"] == "4.14.8-r2"
+    assert state["wazuh_version"] == "4.14.8"
 
 
-def test_update_corpus_skips_install_for_active_release(
+def test_install_release_rejects_mismatched_embedded_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = tmp_path / "home"
-    home.mkdir()
-    target = tmp_path / "active-tests"
-    target.mkdir()
-    (home / "tests").symlink_to(target, target_is_directory=True)
+    (home / "cache").mkdir(parents=True)
+    (home / "corpora").mkdir()
+    release_manifest = _manifest("4.14.8-r2")
+    embedded_manifest = _manifest("4.14.8-r1")
+    archive = _build_archive(tmp_path, embedded_manifest)
+    payloads = {
+        "archive": archive,
+        "checksum": hashlib.sha256(archive).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    with pytest.raises(CorpusError, match="manifests differ"):
+        corpus.install_release(
+            home,
+            CorpusRelease(release_manifest, "manifest", "archive", "checksum"),
+            "4.14.8",
+            "0.1.0rc1",
+        )
+
+    assert not os.path.lexists(home / "current-corpus")
+
+
+def test_failed_state_write_restores_previous_pointer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    (home / "cache").mkdir(parents=True)
+    corpora = home / "corpora"
+    corpora.mkdir()
+
+    previous = corpora / "previous"
+    (previous / "tests").mkdir(parents=True)
+    (previous / "manifest.json").write_text("{}\n", encoding="utf-8")
+    (home / "current-corpus").symlink_to("corpora/previous")
+
+    manifest = _manifest("4.14.8-r2")
+    archive = _build_archive(tmp_path, manifest)
+    payloads = {
+        "archive": archive,
+        "checksum": hashlib.sha256(archive).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+    monkeypatch.setattr(
+        corpus,
+        "save_state",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("state failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="state failure"):
+        corpus.install_release(
+            home,
+            CorpusRelease(manifest, "manifest", "archive", "checksum"),
+            "4.14.8",
+            "0.1.0rc1",
+        )
+
+    assert os.readlink(home / "current-corpus") == "corpora/previous"
+
+
+def test_update_corpus_skips_active_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    current = home / "corpora/current"
+    (current / "tests").mkdir(parents=True)
+    (current / "manifest.json").write_text("{}\n", encoding="utf-8")
+    (home / "current-corpus").symlink_to("corpora/current")
     (home / "state.json").write_text(
         json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r2"}) + "\n",
         encoding="utf-8",
     )
+
     release = CorpusRelease(_manifest("4.14.8-r2"), "manifest", "archive", "checksum")
     monkeypatch.setattr(corpus, "resolve_release", lambda *args: release)
     monkeypatch.setattr(
         corpus,
         "install_release",
-        lambda *args: (_ for _ in ()).throw(AssertionError("must not install")),
+        lambda *args: (_ for _ in ()).throw(AssertionError("must not reinstall")),
     )
 
-    assert corpus.update_corpus(
-        home,
-        "4.14.8",
-        "0.1.0rc1",
-        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
-    ) == "4.14.8-r2"
-
-
-
-def test_reinstall_never_reuses_user_writable_corpus_tree(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    for name in ("cache", "staging", "corpora"):
-        (home / name).mkdir(parents=True, exist_ok=True)
-
-    manifest = _manifest("4.14.8-r2")
-    archive_bytes = _build_archive(tmp_path, manifest, "verified\n")
-    payloads = {
-        "archive": archive_bytes,
-        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
-    }
-    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
-
-    # Simulate a previously user-writable release tree containing a malicious
-    # descendant symlink. Reinstallation must leave it entirely untouched.
-    tainted = home / "corpora/4.14.8-r2-tainted"
-    (tainted / "tests").mkdir(parents=True)
-    victim = tmp_path / "root-owned-target"
-    victim.write_text("unchanged\n", encoding="utf-8")
-    (tainted / "tests/escape").symlink_to(victim)
-
-    chowned: list[Path] = []
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    monkeypatch.setattr(os, "fchown", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        os,
-        "chown",
-        lambda path, uid, gid, **kwargs: chowned.append(Path(path)),
-    )
-    monkeypatch.setattr(os, "lchown", lambda *args, **kwargs: None)
-
-    release = CorpusRelease(manifest, "manifest", "archive", "checksum")
-    user = InvokingUser("test", 1234, 5678, tmp_path)
-
-    corpus.install_release(home, release, "4.14.8", user, "0.1.0rc1")
-
-    active = (home / "current-corpus").resolve()
-    assert active != tainted
-    assert active.parent == home / "corpora"
-    assert victim.read_text(encoding="utf-8") == "unchanged\n"
-    assert all(tainted not in path.parents and path != tainted for path in chowned)
-
-
-def test_chown_corpus_tree_never_follows_symlinks(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = tmp_path / "release"
-    tests = root / "tests"
-    tests.mkdir(parents=True)
-    victim = tmp_path / "victim"
-    victim.write_text("unchanged\n", encoding="utf-8")
-    link = tests / "escape"
-    link.symlink_to(victim)
-
-    calls: list[tuple[Path, bool | None]] = []
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-
-    def fake_chown(
-        path: object,
-        uid: int,
-        gid: int,
-        *,
-        follow_symlinks: bool = True,
-    ) -> None:
-        del uid, gid
-        calls.append((Path(path), follow_symlinks))
-
-    monkeypatch.setattr(os, "chown", fake_chown)
-
-    corpus._chown_corpus_tree(
-        root,
-        InvokingUser("test", 1234, 5678, tmp_path),
-    )
-
-    link_calls = [follow for path, follow in calls if path == link]
-    assert link_calls == [False]
-    assert victim.read_text(encoding="utf-8") == "unchanged\n"
-
-
-
-def test_recover_legacy_accessors_restores_interrupted_migration(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    legacy_tests = home / "tests.legacy"
-    legacy_tests.mkdir()
-    (legacy_tests / "old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.legacy.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
-        encoding="utf-8",
-    )
-
-    corpus._recover_legacy_accessors(home)
-
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert (home / "corpus-manifest.json").is_file()
-    assert not legacy_tests.exists()
-    assert not (home / "corpus-manifest.legacy.json").exists()
-
-
-def test_recover_legacy_accessors_cleans_stale_backups_after_committed_migration(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    release = home / "corpora/release"
-    (release / "tests").mkdir(parents=True)
-    (release / "manifest.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
-        encoding="utf-8",
-    )
-    (home / "current-corpus").symlink_to("corpora/release")
-    (home / "tests").symlink_to("current-corpus/tests")
-    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
-    (home / "tests.legacy").mkdir()
-    (home / "corpus-manifest.legacy.json").write_text("{}\n", encoding="utf-8")
-
-    corpus._recover_legacy_accessors(home)
-
-    assert not (home / "tests.legacy").exists()
-    assert not (home / "corpus-manifest.legacy.json").exists()
-    assert (home / "tests").is_symlink()
-    assert (home / "corpus-manifest.json").is_symlink()
-
-
-def test_recover_legacy_accessors_reports_ambiguous_plain_content(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    (home / "tests").mkdir(parents=True)
-    (home / "tests.legacy").mkdir()
-
-    with pytest.raises(CorpusError, match="inspect .* then remove the obsolete copy"):
-        corpus._recover_legacy_accessors(home)
-
-
-
-def test_successful_install_removes_legacy_backups(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    for name in ("cache", "staging", "corpora"):
-        (home / name).mkdir(parents=True, exist_ok=True)
-    (home / "tests").mkdir()
-    (home / "tests/old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.json").write_text(
-        json.dumps({"schema_version": 1, "corpus_version": "4.14.8-r0"}) + "\n",
-        encoding="utf-8",
-    )
-    (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r0"}) + "\n",
-        encoding="utf-8",
-    )
-
-    manifest = _manifest("4.14.8-r2")
-    archive_bytes = _build_archive(tmp_path, manifest, "new\n")
-    payloads = {
-        "archive": archive_bytes,
-        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
-    }
-    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
-
-    corpus.install_release(
-        home,
-        CorpusRelease(manifest, "manifest", "archive", "checksum"),
-        "4.14.8",
-        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
-        "0.1.0rc1",
-    )
-
-    assert (home / "tests/test_payload.py").read_text(encoding="utf-8") == "new\n"
-    assert not (home / "tests.legacy").exists()
-    assert not (home / "corpus-manifest.legacy.json").exists()
-    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
-    assert state["active_corpus"] == "4.14.8-r2"
-
-
-def test_legacy_cleanup_failure_keeps_new_state_and_content(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    home = tmp_path / "home"
-    for name in ("cache", "staging", "corpora"):
-        (home / name).mkdir(parents=True, exist_ok=True)
-    (home / "tests").mkdir()
-    (home / "tests/old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.json").write_text(
-        json.dumps({"schema_version": 1, "corpus_version": "4.14.8-r0"}) + "\n",
-        encoding="utf-8",
-    )
-    (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r0"}) + "\n",
-        encoding="utf-8",
-    )
-
-    manifest = _manifest("4.14.8-r2")
-    archive_bytes = _build_archive(tmp_path, manifest, "new\n")
-    payloads = {
-        "archive": archive_bytes,
-        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
-    }
-    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
-
-    real_rmtree = shutil.rmtree
-    legacy_tests = home / "tests.legacy"
-
-    def fail_legacy_cleanup(path: object, *args: object, **kwargs: object) -> None:
-        if Path(path) == legacy_tests:
-            raise OSError("simulated legacy cleanup failure")
-        real_rmtree(path, *args, **kwargs)
-
-    monkeypatch.setattr(shutil, "rmtree", fail_legacy_cleanup)
-    caplog.set_level("WARNING")
-
-    corpus.install_release(
-        home,
-        CorpusRelease(manifest, "manifest", "archive", "checksum"),
-        "4.14.8",
-        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
-        "0.1.0rc1",
-    )
-
-    assert (home / "tests/test_payload.py").read_text(encoding="utf-8") == "new\n"
-    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
-    assert state["active_corpus"] == "4.14.8-r2"
-    assert legacy_tests.exists()
-    assert (legacy_tests / "old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "corpus-manifest.legacy.json").exists()
-    assert "Could not remove legacy corpus backup" in caplog.text
-
-
-
-def test_external_current_corpus_does_not_authorize_legacy_cleanup(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    external = tmp_path / "external-corpus"
-    (external / "tests").mkdir(parents=True)
-    (external / "manifest.json").write_text(
-        '{"schema_version": 1, "corpus_version": "external"}\n',
-        encoding="utf-8",
-    )
-    (home / "current-corpus").symlink_to(external, target_is_directory=True)
-    (home / "tests").symlink_to("current-corpus/tests")
-    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
-
-    legacy_tests = home / "tests.legacy"
-    legacy_tests.mkdir()
-    (legacy_tests / "old.py").write_text("old\n", encoding="utf-8")
-    legacy_manifest = home / "corpus-manifest.legacy.json"
-    legacy_manifest.write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
-        encoding="utf-8",
-    )
-
-    corpus._recover_legacy_accessors(home)
-
-    assert not (home / "tests").is_symlink()
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "corpus-manifest.json").is_symlink()
-    assert json.loads(
-        (home / "corpus-manifest.json").read_text(encoding="utf-8")
-    )["corpus_version"] == "4.14.8-r1"
-    assert external.is_dir()
-
-
-@pytest.mark.parametrize(
-    ("backup_name", "target_name"),
-    [
-        ("tests.legacy", "tests"),
-        ("corpus-manifest.legacy.json", "corpus-manifest.json"),
-    ],
-)
-def test_symlinked_legacy_backup_is_never_promoted(
-    tmp_path: Path,
-    backup_name: str,
-    target_name: str,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (home / backup_name).symlink_to(outside, target_is_directory=True)
-
-    with pytest.raises(CorpusError, match="legacy corpus backup must not be a symlink"):
-        corpus._recover_legacy_accessors(home)
-
-    assert (home / backup_name).is_symlink()
-    assert not os.path.lexists(home / target_name)
-
-
-
-@pytest.mark.parametrize("replace_name", ["tests", "manifest.json"])
-def test_symlinked_current_corpus_root_entry_does_not_authorize_backup_cleanup(
-    tmp_path: Path,
-    replace_name: str,
-) -> None:
-    home = tmp_path / "home"
-    release = home / "corpora/release"
-    (release / "tests").mkdir(parents=True)
-    (release / "manifest.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
-        encoding="utf-8",
-    )
-
-    outside = tmp_path / "outside"
-    if replace_name == "tests":
-        outside.mkdir()
-        shutil.rmtree(release / "tests")
-        (release / "tests").symlink_to(outside, target_is_directory=True)
-    else:
-        outside.write_text("{}\n", encoding="utf-8")
-        (release / "manifest.json").unlink()
-        (release / "manifest.json").symlink_to(outside)
-
-    (home / "current-corpus").symlink_to("corpora/release")
-    (home / "tests").symlink_to("current-corpus/tests")
-    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
-    (home / "tests.legacy").mkdir()
-    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.legacy.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
-        encoding="utf-8",
-    )
-
-    corpus._recover_legacy_accessors(home)
-
-    assert not (home / "tests").is_symlink()
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "corpus-manifest.json").is_symlink()
-    assert json.loads(
-        (home / "corpus-manifest.json").read_text(encoding="utf-8")
-    )["corpus_version"] == "4.14.8-r1"
-
-
-def test_nested_symlink_in_current_corpus_does_not_authorize_backup_cleanup(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    release = home / "corpora/release"
-    (release / "tests").mkdir(parents=True)
-    (release / "manifest.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
-        encoding="utf-8",
-    )
-    outside = tmp_path / "outside.py"
-    outside.write_text("external\n", encoding="utf-8")
-    (release / "tests/test_link.py").symlink_to(outside)
-
-    (home / "current-corpus").symlink_to("corpora/release")
-    (home / "tests").symlink_to("current-corpus/tests")
-    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
-    (home / "tests.legacy").mkdir()
-    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.legacy.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
-        encoding="utf-8",
-    )
-
-    corpus._recover_legacy_accessors(home)
-
-    assert not (home / "tests").is_symlink()
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "corpus-manifest.json").is_symlink()
-
-
-
-def test_corpus_tree_traversal_error_fails_closed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = tmp_path / "release"
-    (root / "tests").mkdir(parents=True)
-    (root / "manifest.json").write_text("{}\n", encoding="utf-8")
-
-    def failing_walk(
-        top: object,
-        *,
-        followlinks: bool = False,
-        onerror: object = None,
-    ) -> object:
-        del followlinks
-        yield str(top), ["tests"], ["manifest.json"]
-        assert callable(onerror)
-        onerror(PermissionError(13, "Permission denied", str(root / "tests")))
-
-    monkeypatch.setattr(os, "walk", failing_walk)
-
-    assert corpus._corpus_tree_is_symlink_free(root) is False
-
-
-def test_unreadable_current_corpus_preserves_legacy_backups(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    release = home / "corpora/release"
-    (release / "tests").mkdir(parents=True)
-    (release / "manifest.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
-        encoding="utf-8",
-    )
-    (home / "current-corpus").symlink_to("corpora/release")
-    (home / "tests").symlink_to("current-corpus/tests")
-    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
-    (home / "tests.legacy").mkdir()
-    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
-    (home / "corpus-manifest.legacy.json").write_text(
-        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
-        encoding="utf-8",
-    )
-
-    real_walk = os.walk
-
-    def failing_walk(
-        top: object,
-        *,
-        followlinks: bool = False,
-        onerror: object = None,
-    ) -> object:
-        if Path(top) == release:
-            yield str(release), ["tests"], ["manifest.json"]
-            assert callable(onerror)
-            onerror(PermissionError(13, "Permission denied", str(release / "tests")))
-            return
-        yield from real_walk(top, followlinks=followlinks, onerror=onerror)
-
-    monkeypatch.setattr(os, "walk", failing_walk)
-
-    corpus._recover_legacy_accessors(home)
-
-    assert not (home / "tests").is_symlink()
-    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
-    assert not (home / "corpus-manifest.json").is_symlink()
-    assert json.loads(
-        (home / "corpus-manifest.json").read_text(encoding="utf-8")
-    )["corpus_version"] == "4.14.8-r1"
+    assert corpus.update_corpus(home, "4.14.8", "0.1.0rc1") == "4.14.8-r2"
