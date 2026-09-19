@@ -534,3 +534,100 @@ def test_recover_legacy_accessors_reports_ambiguous_plain_content(
 
     with pytest.raises(CorpusError, match="inspect .* then remove the obsolete copy"):
         corpus._recover_legacy_accessors(home)
+
+
+
+def test_successful_install_removes_legacy_backups(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    for name in ("cache", "staging", "corpora"):
+        (home / name).mkdir(parents=True, exist_ok=True)
+    (home / "tests").mkdir()
+    (home / "tests/old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.json").write_text(
+        json.dumps({"schema_version": 1, "corpus_version": "4.14.8-r0"}) + "\n",
+        encoding="utf-8",
+    )
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r0"}) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = _manifest("4.14.8-r2")
+    archive_bytes = _build_archive(tmp_path, manifest, "new\n")
+    payloads = {
+        "archive": archive_bytes,
+        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    corpus.install_release(
+        home,
+        CorpusRelease(manifest, "manifest", "archive", "checksum"),
+        "4.14.8",
+        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
+        "0.1.0rc1",
+    )
+
+    assert (home / "tests/test_payload.py").read_text(encoding="utf-8") == "new\n"
+    assert not (home / "tests.legacy").exists()
+    assert not (home / "corpus-manifest.legacy.json").exists()
+    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
+    assert state["active_corpus"] == "4.14.8-r2"
+
+
+def test_legacy_cleanup_failure_keeps_new_state_and_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    home = tmp_path / "home"
+    for name in ("cache", "staging", "corpora"):
+        (home / name).mkdir(parents=True, exist_ok=True)
+    (home / "tests").mkdir()
+    (home / "tests/old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.json").write_text(
+        json.dumps({"schema_version": 1, "corpus_version": "4.14.8-r0"}) + "\n",
+        encoding="utf-8",
+    )
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r0"}) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = _manifest("4.14.8-r2")
+    archive_bytes = _build_archive(tmp_path, manifest, "new\n")
+    payloads = {
+        "archive": archive_bytes,
+        "checksum": hashlib.sha256(archive_bytes).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    real_rmtree = shutil.rmtree
+    legacy_tests = home / "tests.legacy"
+
+    def fail_legacy_cleanup(path: object, *args: object, **kwargs: object) -> None:
+        if Path(path) == legacy_tests:
+            raise OSError("simulated legacy cleanup failure")
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", fail_legacy_cleanup)
+    caplog.set_level("WARNING")
+
+    corpus.install_release(
+        home,
+        CorpusRelease(manifest, "manifest", "archive", "checksum"),
+        "4.14.8",
+        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
+        "0.1.0rc1",
+    )
+
+    assert (home / "tests/test_payload.py").read_text(encoding="utf-8") == "new\n"
+    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
+    assert state["active_corpus"] == "4.14.8-r2"
+    assert legacy_tests.exists()
+    assert (legacy_tests / "old.py").read_text(encoding="utf-8") == "old\n"
+    assert not (home / "corpus-manifest.legacy.json").exists()
+    assert "Could not remove legacy corpus backup" in caplog.text

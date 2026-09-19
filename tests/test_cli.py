@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -97,7 +98,7 @@ def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
     home = tmp_path / "managed"
     home.mkdir()
     (home / "state.json").write_text(
-        '{"schema_version": 1, "workspace": "' + str(workspace) + '"}\n',
+        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
         encoding="utf-8",
     )
     calls: list[list[str]] = []
