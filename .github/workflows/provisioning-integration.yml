@@ -54,7 +54,7 @@ jobs:
 
       - name: Second init must converge
         run: |
-          wazuhdevenv init "$WORKSPACE" --wazuh-version "${{ inputs.wazuh_version }}" --skip-corpus
+          wazuhdevenv init "$WORKSPACE" --wazuh-version "$WAZUH_VERSION" --skip-corpus
 
       - name: Verify environment after second init
         run: |

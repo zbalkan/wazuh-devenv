@@ -352,18 +352,25 @@ def _replace_block_child(
     return text[: block_match.start()] + replacement + text[block_match.end() :]
 
 
+def _ascii_uint_in_range(value: str, minimum: int, maximum: int) -> bool:
+    if not re.fullmatch(r"[0-9]+", value):
+        return False
+    number = int(value)
+    return minimum <= number <= maximum
+
+
 def _valid_rule_test_threads(value: str) -> bool:
     if value == "auto":
         return True
-    return value.isdigit() and 1 <= int(value) <= 128
+    return _ascii_uint_in_range(value, 1, 128)
 
 
 def _valid_rule_test_max_sessions(value: str) -> bool:
-    return value.isdigit() and 1 <= int(value) <= 500
+    return _ascii_uint_in_range(value, 1, 500)
 
 
 def _valid_rule_test_session_timeout(value: str) -> bool:
-    match = re.fullmatch(r"([1-9]\d*)([smhd])", value)
+    match = re.fullmatch(r"([1-9][0-9]*)([smhd])", value)
     if not match:
         return False
     amount = int(match.group(1))
