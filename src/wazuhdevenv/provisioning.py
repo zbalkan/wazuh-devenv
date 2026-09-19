@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -23,6 +24,11 @@ WAZUH_HOME = Path("/var/ossec")
 OSSEC_CONF = WAZUH_HOME / "etc/ossec.conf"
 WINDOWS_RULES = WAZUH_HOME / "ruleset/rules/0575-win-base_rules.xml"
 LOGTEST_SOCKET = WAZUH_HOME / "queue/sockets/logtest"
+
+STOCK_PLACEHOLDER_SHA256 = {
+    ("rules", "local_rules.xml"): "991dc926bd2e3aec88bd79be1c8b458777f64f489b3e6524e682ac33620425f4",
+    ("decoders", "local_decoder.xml"): "21f5e1ff2ea096f2b1b6acdc1fc25bcac46734614b253f6ad1352d9c2a1c5c13",
+}
 
 WINDOWS_RULE_DEFAULT = """  <rule id="60000" level="0">
     <category>ossec</category>
@@ -120,8 +126,7 @@ class PackageManager:
                 raw = self.runner.capture(["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "wazuh-manager"])
         except CommandError:
             return None
-        match = re.search(r"\d+\.\d+\.\d+", raw)
-        return match.group(0) if match else None
+        return _normalize_wazuh_version(raw)
 
     def _apt_install(self, packages: list[str]) -> None:
         self.runner.run(["apt-get", "update"], privileged=True)
@@ -187,8 +192,11 @@ priority=1
 
     def install_wazuh(self, requested_version: str | None) -> str:
         current = self.installed_version()
+        requested_normalized = (
+            _normalize_wazuh_version(requested_version) if requested_version else None
+        )
         if current:
-            if requested_version and current != requested_version:
+            if requested_normalized and current != requested_normalized:
                 raise ConfigurationError(
                     f"Wazuh {current} is already installed; requested {requested_version}. "
                     "wazuhdevenv does not perform Wazuh upgrades"
@@ -224,6 +232,13 @@ priority=1
         if not installed:
             raise ConfigurationError("Wazuh package installation completed but version could not be determined")
         return installed
+
+
+def _normalize_wazuh_version(value: str) -> str:
+    match = re.search(r"\d+\.\d+\.\d+", value)
+    if not match:
+        raise ConfigurationError(f"cannot determine Wazuh version from {value!r}")
+    return match.group(0)
 
 
 def _replace_simple_tag(text: str, tag: str, value: str, allowed: set[str]) -> str:
@@ -328,28 +343,102 @@ def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
             os.chown(path, user.uid, user.gid)
 
 
-def _directory_entries(runner: CommandRunner, path: Path, *, privileged: bool) -> list[str]:
+def _local_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _target_entries(runner: CommandRunner, target: Path) -> list[tuple[str, str]]:
     output = runner.capture(
-        ["find", str(path), "-mindepth", "1", "-maxdepth", "1", "-printf", "%f\n"],
-        privileged=privileged,
+        ["find", str(target), "-mindepth", "1", "-printf", "%y\t%P\n"],
+        privileged=True,
     )
-    return [line for line in output.splitlines() if line]
+    entries: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        if not line:
+            continue
+        try:
+            kind, relative = line.split("\t", 1)
+        except ValueError as exc:
+            raise ConfigurationError(f"cannot inspect existing Wazuh content under {target}") from exc
+        entries.append((kind, relative))
+    return entries
+
+
+def _target_sha256(runner: CommandRunner, path: Path) -> str:
+    output = runner.capture(["sha256sum", str(path)], privileged=True).strip()
+    digest = output.split(maxsplit=1)[0] if output else ""
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+        raise ConfigurationError(f"cannot determine SHA-256 for {path}")
+    return digest.lower()
+
+
+def _is_stock_placeholder(target: Path, relative: str, digest: str) -> bool:
+    expected = STOCK_PLACEHOLDER_SHA256.get((target.name, relative))
+    return expected == digest
 
 
 def _adopt_existing(runner: CommandRunner, source: Path, target: Path) -> None:
-    target_entries = _directory_entries(runner, target, privileged=True)
+    target_entries = _target_entries(runner, target)
     if not target_entries:
         return
-    source_entries = [entry.name for entry in source.iterdir()]
-    if source_entries:
-        raise ConfigurationError(f"both {source} and {target} contain files; refusing an ambiguous merge")
 
-    script = (
-        "from pathlib import Path; import shutil,sys; "
-        "src=Path(sys.argv[1]); dst=Path(sys.argv[2]); "
-        "[shutil.move(str(p), str(dst / p.name)) for p in src.iterdir()]"
-    )
-    runner.run([sys.executable, "-c", script, str(target), str(source)], privileged=True)
+    for entry in source.rglob("*"):
+        if entry.is_symlink():
+            raise ConfigurationError(f"workspace content must not contain symlinks: {entry}")
+
+    copies: list[tuple[Path, Path]] = []
+    for kind, relative in target_entries:
+        target_entry = target / relative
+        source_entry = source / relative
+
+        if kind == "d":
+            if source_entry.exists() and not source_entry.is_dir():
+                raise ConfigurationError(
+                    f"cannot adopt {target_entry}: workspace path is not a directory"
+                )
+            continue
+        if kind != "f":
+            raise ConfigurationError(
+                f"unsupported existing Wazuh content under {target}: {relative}"
+            )
+
+        target_digest = _target_sha256(runner, target_entry)
+        stock_placeholder = _is_stock_placeholder(target, relative, target_digest)
+
+        if source_entry.exists():
+            if source_entry.is_symlink() or not source_entry.is_file():
+                raise ConfigurationError(
+                    f"cannot adopt {target_entry}: workspace path is not a regular file"
+                )
+            source_digest = _local_sha256(source_entry)
+            if source_digest == target_digest or stock_placeholder:
+                continue
+            raise ConfigurationError(
+                f"conflicting existing Wazuh content: {target_entry} and {source_entry}"
+            )
+
+        if stock_placeholder:
+            continue
+
+        for parent in source_entry.parents:
+            if parent == source:
+                break
+            if parent.exists() and not parent.is_dir():
+                raise ConfigurationError(
+                    f"cannot adopt {target_entry}: workspace parent is not a directory"
+                )
+        copies.append((target_entry, source_entry))
+
+    for target_entry, source_entry in copies:
+        runner.run(["mkdir", "-p", str(source_entry.parent)], privileged=True)
+        runner.run(
+            ["cp", "--preserve=mode,timestamps", str(target_entry), str(source_entry)],
+            privileged=True,
+        )
 
 
 def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
