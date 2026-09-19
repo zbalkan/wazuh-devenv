@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import secrets
 import shutil
@@ -22,12 +21,10 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from .errors import CorpusError
-from .paths import InvokingUser
 from .state import load_state, save_state
 
 RELEASES_API = "https://api.github.com/repos/zbalkan/wazuh-rule-tests/releases?per_page=100"
 USER_AGENT = "wazuh-devenv"
-LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -198,287 +195,73 @@ def _safe_extract(archive: Path, destination: Path) -> None:
         source.extractall(destination)
 
 
-def _write_owned_temp(
-    directory: Path,
-    prefix: str,
-    content: bytes,
-    user: InvokingUser,
-) -> Path:
-    fd, name = tempfile.mkstemp(prefix=prefix, dir=directory)
+def _write_bytes(path: Path, content: bytes) -> None:
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(name)
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-            if os.geteuid() == 0 and user.uid != 0:
-                os.fchown(stream.fileno(), user.uid, user.gid)
-        return temporary
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
-def _write_owned_bytes(path: Path, content: bytes, user: InvokingUser) -> None:
-    temporary = _write_owned_temp(path.parent, f".{path.name}.", content, user)
-    try:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
-def _atomic_symlink(link: Path, target: str, user: InvokingUser) -> None:
-    temporary = link.parent / f".{link.name}.{secrets.token_hex(16)}"
+def _atomic_symlink(link: Path, target: str) -> None:
+    temporary = link.parent / f".{link.name}.{secrets.token_hex(8)}"
     try:
         os.symlink(target, temporary)
-        if os.geteuid() == 0 and user.uid != 0:
-            os.lchown(temporary, user.uid, user.gid)
         os.replace(temporary, link)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _remove_managed_path(path: Path) -> None:
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.is_dir():
-        shutil.rmtree(path)
-
-
-def _corpus_tree_is_symlink_free(root: Path) -> bool:
-    traversal_failed = False
-
-    def onerror(error: OSError) -> None:
-        nonlocal traversal_failed
-        traversal_failed = True
-
-    for current, directories, files in os.walk(
-        root,
-        followlinks=False,
-        onerror=onerror,
-    ):
-        directory = Path(current)
-        for name in (*directories, *files):
-            if (directory / name).is_symlink():
-                return False
-
-    return not traversal_failed
-
-
-def _current_corpus_is_managed(home: Path) -> bool:
-    current = home / "current-corpus"
-    if not current.is_symlink():
-        return False
-    try:
-        target = current.resolve(strict=True)
-        corpora = (home / "corpora").resolve(strict=True)
-    except OSError:
-        return False
-    if target.parent != corpora:
-        return False
-
-    tests = target / "tests"
-    manifest = target / "manifest.json"
-    if tests.is_symlink() or manifest.is_symlink():
-        return False
-    if not tests.is_dir() or not manifest.is_file():
-        return False
-    return _corpus_tree_is_symlink_free(target)
-
-
-def _validate_legacy_backup(path: Path, *, directory: bool) -> None:
-    if path.is_symlink():
-        raise CorpusError(f"legacy corpus backup must not be a symlink: {path}")
-    valid = path.is_dir() if directory else path.is_file()
-    if not valid:
-        expected = "directory" if directory else "regular file"
-        raise CorpusError(f"legacy corpus backup must be a {expected}: {path}")
-
-
-def _recover_legacy_accessors(home: Path) -> None:
-    current_valid = _current_corpus_is_managed(home)
-
-    for accessor, legacy, expected_target, legacy_is_directory in (
-        (home / "tests", home / "tests.legacy", "current-corpus/tests", True),
-        (
-            home / "corpus-manifest.json",
-            home / "corpus-manifest.legacy.json",
-            "current-corpus/manifest.json",
-            False,
-        ),
-    ):
-        if not os.path.lexists(legacy):
-            continue
-
-        if (
-            current_valid
-            and accessor.is_symlink()
-            and os.readlink(accessor) == expected_target
-        ):
-            _remove_managed_path(legacy)
-            continue
-
-        _validate_legacy_backup(legacy, directory=legacy_is_directory)
-
-        if os.path.lexists(accessor):
-            if accessor.is_symlink():
-                accessor.unlink()
-            else:
-                raise CorpusError(
-                    "interrupted corpus migration left both active and backup content; "
-                    f"inspect {accessor} and {legacy}, then remove the obsolete copy"
-                )
-        os.replace(legacy, accessor)
-
-
-def _prepare_corpus_accessors(
-    home: Path,
-    user: InvokingUser,
-) -> tuple[Path | None, Path | None]:
-    tests = home / "tests"
-    manifest = home / "corpus-manifest.json"
-    legacy_tests = home / "tests.legacy"
-    legacy_manifest = home / "corpus-manifest.legacy.json"
-
-    old_tests_link = os.readlink(tests) if tests.is_symlink() else None
-    old_manifest_link = os.readlink(manifest) if manifest.is_symlink() else None
-    moved_tests: Path | None = None
-    moved_manifest: Path | None = None
-
-    try:
-        if os.path.lexists(tests) and not tests.is_symlink():
-            if legacy_tests.exists():
-                raise CorpusError(f"legacy corpus backup already exists: {legacy_tests}")
-            os.replace(tests, legacy_tests)
-            moved_tests = legacy_tests
-
-        if os.path.lexists(manifest) and not manifest.is_symlink():
-            if legacy_manifest.exists():
-                raise CorpusError(
-                    f"legacy corpus manifest backup already exists: {legacy_manifest}"
-                )
-            os.replace(manifest, legacy_manifest)
-            moved_manifest = legacy_manifest
-
-        _atomic_symlink(tests, "current-corpus/tests", user)
-        _atomic_symlink(manifest, "current-corpus/manifest.json", user)
-        return moved_tests, moved_manifest
-    except Exception:
-        if old_tests_link is not None:
-            _atomic_symlink(tests, old_tests_link, user)
-        else:
-            if tests.is_symlink():
-                tests.unlink()
-            if moved_tests is not None and moved_tests.exists():
-                os.replace(moved_tests, tests)
-
-        if old_manifest_link is not None:
-            _atomic_symlink(manifest, old_manifest_link, user)
-        else:
-            if manifest.is_symlink():
-                manifest.unlink()
-            if moved_manifest is not None and moved_manifest.exists():
-                os.replace(moved_manifest, manifest)
-        raise
-
-
-def _chown_corpus_tree(root: Path, user: InvokingUser) -> None:
-    if os.geteuid() != 0 or user.uid == 0:
-        return
-
-    # The top-level directory is created by the current root process with mode
-    # 0700. Keep it root-owned until every descendant has been processed so the
-    # invoking user cannot race the ownership walk.
-    for current, directories, files in os.walk(
-        root,
-        topdown=False,
-        followlinks=False,
-    ):
-        directory = Path(current)
-        for name in files:
-            os.chown(
-                directory / name,
-                user.uid,
-                user.gid,
-                follow_symlinks=False,
-            )
-        for name in directories:
-            os.chown(
-                directory / name,
-                user.uid,
-                user.gid,
-                follow_symlinks=False,
-            )
-        os.chown(
-            directory,
-            user.uid,
-            user.gid,
-            follow_symlinks=False,
-        )
 
 
 def install_release(
     home: Path,
     release: CorpusRelease,
     wazuh_version: str,
-    user: InvokingUser,
     wazuhtester_version: str,
 ) -> None:
     cache = home / "cache"
-    staging_root = home / "staging"
-    corpora_root = home / "corpora"
-    for directory in (cache, staging_root, corpora_root):
+    corpora = home / "corpora"
+    for directory in (cache, corpora):
         if directory.is_symlink():
             raise CorpusError(f"managed corpus directory must not be a symlink: {directory}")
         directory.mkdir(parents=True, exist_ok=True)
 
     archive = cache / f"wazuh-rule-tests-{release.version}.zip"
-    _write_owned_bytes(archive, _request(release.archive_url), user)
+    _write_bytes(archive, _request(release.archive_url))
     digest = _verify_checksum(
         archive,
         _request(release.checksum_url).decode("ascii", errors="strict"),
     )
 
-    # Never reuse an existing corpus tree. Once a completed tree is handed to
-    # the invoking user it must be considered mutable and untrusted. A fresh
-    # root-owned 0700 directory gives validation and ownership transfer an
-    # attacker-inaccessible working tree.
     release_root = Path(
         tempfile.mkdtemp(
             prefix=f"{release.version}-{digest[:12]}.",
-            dir=corpora_root,
+            dir=corpora,
         )
     )
-    current_link = home / "current-corpus"
-    old_current_target = (
-        os.readlink(current_link) if current_link.is_symlink() else None
-    )
-    if os.path.lexists(current_link) and not current_link.is_symlink():
+    current = home / "current-corpus"
+    old_target = os.readlink(current) if current.is_symlink() else None
+    if os.path.lexists(current) and not current.is_symlink():
         shutil.rmtree(release_root, ignore_errors=True)
-        raise CorpusError(f"current corpus pointer must be a symlink: {current_link}")
+        raise CorpusError(f"current corpus pointer must be a symlink: {current}")
 
-    moved_tests: Path | None = None
-    moved_manifest: Path | None = None
     pointer_swapped = False
     try:
-        _recover_legacy_accessors(home)
         _safe_extract(archive, release_root)
         embedded_path = release_root / "manifest.json"
         tests_path = release_root / "tests"
         if not embedded_path.is_file() or not tests_path.is_dir():
             raise CorpusError("corpus archive must contain manifest.json and tests/")
+
         embedded = json.loads(embedded_path.read_text(encoding="utf-8"))
         if embedded != release.manifest:
             raise CorpusError("standalone and embedded corpus manifests differ")
 
-        _chown_corpus_tree(release_root, user)
-
-        moved_tests, moved_manifest = _prepare_corpus_accessors(home, user)
-        _atomic_symlink(
-            current_link,
-            os.path.relpath(release_root, home),
-            user,
-        )
+        _atomic_symlink(current, os.path.relpath(release_root, home))
         pointer_swapped = True
 
         state = load_state(home)
@@ -492,46 +275,31 @@ def install_release(
                 .isoformat(),
             }
         )
-        save_state(home, state, user)
+        save_state(home, state)
     except Exception:
         if pointer_swapped:
-            if old_current_target is None:
-                current_link.unlink(missing_ok=True)
+            if old_target is None:
+                current.unlink(missing_ok=True)
             else:
-                _atomic_symlink(current_link, old_current_target, user)
-
-        if old_current_target is None:
-            for accessor in (home / "tests", home / "corpus-manifest.json"):
-                if accessor.is_symlink():
-                    accessor.unlink()
-            if moved_tests is not None and moved_tests.exists():
-                os.replace(moved_tests, home / "tests")
-            if moved_manifest is not None and moved_manifest.exists():
-                os.replace(moved_manifest, home / "corpus-manifest.json")
-
+                _atomic_symlink(current, old_target)
         shutil.rmtree(release_root, ignore_errors=True)
         raise
-    else:
-        for legacy in (moved_tests, moved_manifest):
-            if legacy is None or not legacy.exists():
-                continue
-            try:
-                if legacy.is_dir():
-                    shutil.rmtree(legacy)
-                else:
-                    legacy.unlink()
-            except OSError as exc:
-                LOG.warning("Could not remove legacy corpus backup %s: %s", legacy, exc)
+
 
 def update_corpus(
     home: Path,
     wazuh_version: str,
     wazuhtester_version: str,
-    user: InvokingUser,
 ) -> str:
     release = resolve_release(wazuh_version, wazuhtester_version)
     state = load_state(home)
-    if state.get("active_corpus") == release.version and (home / "tests").is_dir():
+    current = home / "current-corpus"
+    if (
+        state.get("active_corpus") == release.version
+        and (current / "tests").is_dir()
+        and (current / "manifest.json").is_file()
+    ):
         return release.version
-    install_release(home, release, wazuh_version, user, wazuhtester_version)
+
+    install_release(home, release, wazuh_version, wazuhtester_version)
     return release.version

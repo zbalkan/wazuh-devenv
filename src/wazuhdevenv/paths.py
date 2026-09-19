@@ -44,15 +44,12 @@ class InvokingUser:
 
     @classmethod
     def current(cls) -> "InvokingUser":
-        sudo_user = os.environ.get("SUDO_USER")
         try:
-            if os.geteuid() == 0 and sudo_user and sudo_user != "root":
-                entry = pwd.getpwnam(sudo_user)
-            else:
-                entry = pwd.getpwuid(os.getuid())
+            entry = pwd.getpwuid(os.getuid())
         except KeyError as exc:
-            account = sudo_user if sudo_user and sudo_user != "root" else str(os.getuid())
-            raise ConfigurationError(f"invoking user does not exist: {account}") from exc
+            raise ConfigurationError(
+                f"invoking user does not exist: {os.getuid()}"
+            ) from exc
         return cls(entry.pw_name, entry.pw_uid, entry.pw_gid, Path(entry.pw_dir))
 
 

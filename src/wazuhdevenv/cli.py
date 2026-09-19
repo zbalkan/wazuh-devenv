@@ -101,7 +101,7 @@ def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
 
 def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     workspace = resolve_workspace(args.path)
-    with managed_lock(home, user):
+    with managed_lock(home):
         LOG.info("Provisioning workspace: %s", workspace)
         version = initialize(
             workspace,
@@ -113,7 +113,7 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
         if not args.skip_corpus:
             tester_version = _workspace_wazuhtester_version(user, home)
             try:
-                corpus = update_corpus(home, version, tester_version, user)
+                corpus = update_corpus(home, version, tester_version)
             except CorpusError as exc:
                 LOG.warning(
                     "Wazuh is ready, but the default rule-test corpus could not be installed: %s. "
@@ -133,7 +133,7 @@ def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) ->
             release = resolve_release(version, tester_version)
             print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
             return 0
-        installed = update_corpus(home, version, tester_version, user)
+        installed = update_corpus(home, version, tester_version)
         LOG.info("Managed rule-test corpus ready: %s", installed)
     return 0
 
@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         user = InvokingUser.current()
         home = managed_home(user)
-        ensure_managed_home(home, user)
+        ensure_managed_home(home)
         _configure_logging(home, user, args.verbose)
         logging_ready = True
 
