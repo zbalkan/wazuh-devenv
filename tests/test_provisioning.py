@@ -14,6 +14,8 @@ from wazuhdevenv.paths import InvokingUser
 from wazuhdevenv.provisioning import (
     PackageManager,
     ProvisioningSnapshot,
+    WorkspaceMutations,
+    _plan_adoption,
     _adopt_existing,
     _normalize_wazuh_version,
     _replace_block_child,
@@ -198,6 +200,7 @@ def test_initialize_rolls_back_after_post_stop_failure(
         windows_rules="original",
         fstab="original",
         preexisting_mounts=frozenset(),
+        workspace_metadata=(),
     )
 
     class FakePackageManager:
@@ -269,7 +272,7 @@ def test_initialize_rolls_back_after_post_stop_failure(
         provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
 
     assert events[-2:] == ["validate", "rollback"]
-    assert "stop" in events
+    assert events.index("stop") < events.index("permissions") < events.index("validate")
 
 
 
@@ -378,3 +381,69 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     manager.ensure_system_dependencies()
 
     assert installed == [["python3-venv"]]
+
+
+
+def test_adoption_plan_does_not_mutate_workspace(tmp_path: Path) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    target = tmp_path / "wazuh/rules"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (target / "custom.xml").write_text("target\n", encoding="utf-8")
+
+    plan = _plan_adoption(runner, source, target)
+
+    assert len(plan.copies) == 1
+    assert not (source / "custom.xml").exists()
+    assert not any(command[0] == "cp" for command in runner.commands)
+
+
+def test_prefer_workspace_local_allows_changed_local_rules_placeholder(
+    tmp_path: Path,
+) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    target = tmp_path / "wazuh/rules"
+    source.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (source / "local_rules.xml").write_text("workspace\n", encoding="utf-8")
+    (target / "local_rules.xml").write_text("new upstream placeholder\n", encoding="utf-8")
+
+    _adopt_existing(
+        runner,
+        source,
+        target,
+        prefer_workspace_local=True,
+    )
+
+    assert (source / "local_rules.xml").read_text(encoding="utf-8") == "workspace\n"
+    assert not any(command[0] == "cp" for command in runner.commands)
+
+
+def test_restore_workspace_removes_adopted_files_and_restores_metadata(
+    tmp_path: Path,
+) -> None:
+    runner = LocalRunner()
+    source = tmp_path / "workspace/rules"
+    source.mkdir(parents=True)
+    copied = source / "adopted.xml"
+    copied.write_text("adopted\n", encoding="utf-8")
+    snapshot = ProvisioningSnapshot(
+        service_was_active=False,
+        ossec_conf="",
+        windows_rules="",
+        fstab="",
+        preexisting_mounts=frozenset(),
+        workspace_metadata=(
+            provisioning.WorkspaceMetadata(source, "755", os.getuid(), os.getgid()),
+        ),
+    )
+    mutations = WorkspaceMutations(copied_files=[copied])
+
+    errors = provisioning._restore_workspace(runner, snapshot, mutations)
+
+    assert errors == []
+    assert not copied.exists()
+    assert any(command[0] == "chown" for command in runner.commands)
+    assert any(command[0] == "chmod" for command in runner.commands)

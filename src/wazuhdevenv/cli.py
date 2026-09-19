@@ -34,6 +34,14 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("path", nargs="?", help="Workspace path (default: current directory)")
     init.add_argument("--wazuh-version", help="Install or require an exact Wazuh version")
     init.add_argument(
+        "--prefer-workspace-local",
+        action="store_true",
+        help=(
+            "Prefer workspace local_rules.xml/local_decoder.xml when existing Wazuh "
+            "copies differ from known stock placeholders"
+        ),
+    )
+    init.add_argument(
         "--skip-corpus",
         action="store_true",
         help="Do not download the compatible default rule-test corpus",
@@ -108,6 +116,7 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
             home,
             user,
             wazuh_version=args.wazuh_version,
+            prefer_workspace_local=args.prefer_workspace_local,
         )
         LOG.info("Wazuh Manager ready: %s", version)
         if not args.skip_corpus:
