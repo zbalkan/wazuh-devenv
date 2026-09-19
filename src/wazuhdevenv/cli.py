@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import logging
 import os
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .corpus import resolve_release, update_corpus
-from .errors import WazuhDevenvError
+from .errors import ConfigurationError, WazuhDevenvError
 from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
@@ -48,14 +49,24 @@ def _configure_logging(home: Path, user: InvokingUser, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     log_path = home / "logs" / "wazuhdevenv.log"
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    handlers.append(file_handler)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
+    try:
+        fd = os.open(log_path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ConfigurationError(f"log file must not be a symlink: {log_path}") from exc
+        raise
+
+    try:
+        if os.geteuid() == 0 and user.uid != 0:
+            os.fchown(fd, user.uid, user.gid)
+        stream = os.fdopen(fd, "a", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+    handlers.append(logging.StreamHandler(stream))
     logging.basicConfig(level=level, format="%(levelname)s %(message)s", handlers=handlers)
-    if os.geteuid() == 0 and user.uid != 0:
-        try:
-            os.chown(log_path, user.uid, user.gid)
-        except OSError:
-            pass
 
 
 def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:

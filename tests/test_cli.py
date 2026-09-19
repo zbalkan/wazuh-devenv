@@ -51,3 +51,18 @@ def test_update_command_passes_invoking_user_to_managed_lock(
 
     assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
     assert lock_calls == [(home, user)]
+
+
+
+def test_configure_logging_refuses_symlinked_log_file(tmp_path: Path) -> None:
+    home = tmp_path / "managed"
+    logs = home / "logs"
+    logs.mkdir(parents=True)
+    victim = tmp_path / "victim.log"
+    victim.write_text("unchanged\n", encoding="utf-8")
+    (logs / "wazuhdevenv.log").symlink_to(victim)
+
+    with pytest.raises(cli.ConfigurationError, match="log file must not be a symlink"):
+        cli._configure_logging(home, _user(tmp_path), False)
+
+    assert victim.read_text(encoding="utf-8") == "unchanged\n"
