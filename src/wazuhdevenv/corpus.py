@@ -289,7 +289,7 @@ def install_release(
         _request(release.checksum_url).decode("ascii", errors="strict"),
     )
 
-    staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
+    staging: Path | None = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
     release_root = corpora_root / f"{release.version}-{digest[:12]}"
     current_link = home / "current-corpus"
     old_current_target = (
@@ -303,6 +303,7 @@ def install_release(
     pointer_swapped = False
     release_created = False
     try:
+        assert staging is not None
         _safe_extract(archive, staging)
         embedded_path = staging / "manifest.json"
         tests_path = staging / "tests"
@@ -314,10 +315,10 @@ def install_release(
 
         if release_root.exists():
             shutil.rmtree(staging)
-            staging = Path()
+            staging = None
         else:
             os.replace(staging, release_root)
-            staging = Path()
+            staging = None
             release_created = True
 
         if os.geteuid() == 0 and user.uid != 0:
@@ -379,7 +380,7 @@ def install_release(
             except OSError as exc:
                 LOG.warning("Could not remove legacy corpus backup %s: %s", legacy, exc)
     finally:
-        if staging and staging.exists():
+        if staging is not None and staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
 
 def update_corpus(
