@@ -46,3 +46,9 @@ jobs:
           "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install dist/*.whl
           "$RUNNER_TEMP/wheel-smoke/bin/wazuhdevenv" --help
           "$RUNNER_TEMP/wheel-smoke/bin/python" -m wazuhdevenv --help
+
+          python -m venv "$RUNNER_TEMP/sdist-smoke"
+          "$RUNNER_TEMP/sdist-smoke/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/sdist-smoke/bin/python" -m pip install dist/*.tar.gz
+          "$RUNNER_TEMP/sdist-smoke/bin/wazuhdevenv" --help
+          "$RUNNER_TEMP/sdist-smoke/bin/python" -m wazuhdevenv --help
