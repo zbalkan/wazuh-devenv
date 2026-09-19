@@ -1,0 +1,68 @@
+name: Wazuh provisioning integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      wazuh-version:
+        description: Wazuh Manager version to provision
+        required: true
+        default: "4.14.7"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  init-idempotence:
+    runs-on: ubuntu-latest
+    env:
+      WAZUHDEVENV_HOME: ${{ runner.temp }}/wazuhdevenv-state
+      WAZUHTESTER_SPEC: "wazuhtester @ git+https://github.com/zbalkan/wazuhtester@main"
+      WORKSPACE: ${{ runner.temp }}/wazuh-workspace
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install wazuh-devenv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: First init
+        run: |
+          wazuhdevenv init "$WORKSPACE"             --wazuh-version "${{ inputs.wazuh-version }}"             --skip-corpus
+
+      - name: Verify provisioned environment
+        run: |
+          sudo systemctl is-active --quiet wazuh-manager
+          sudo test -S /var/ossec/queue/sockets/logtest
+          test -f "$WORKSPACE/.venv/pyvenv.cfg"
+          test -d "$WORKSPACE/rules"
+          test -d "$WORKSPACE/decoders"
+          test -f "$WAZUHDEVENV_HOME/state.json"
+          sudo mountpoint -q /var/ossec/etc/rules
+          sudo mountpoint -q /var/ossec/etc/decoders
+          "$WORKSPACE/.venv/bin/python" -c "import wazuhtester; print(wazuhtester.__version__)"
+
+      - name: Second init must converge
+        run: |
+          wazuhdevenv init "$WORKSPACE"             --wazuh-version "${{ inputs.wazuh-version }}"             --skip-corpus
+
+      - name: Verify environment after second init
+        run: |
+          sudo systemctl is-active --quiet wazuh-manager
+          sudo test -S /var/ossec/queue/sockets/logtest
+          sudo mountpoint -q /var/ossec/etc/rules
+          sudo mountpoint -q /var/ossec/etc/decoders
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          sudo systemctl status wazuh-manager --no-pager || true
+          sudo journalctl -u wazuh-manager --no-pager -n 150 || true
+          sudo findmnt /var/ossec/etc/rules /var/ossec/etc/decoders || true
+          cat "$WAZUHDEVENV_HOME/state.json" || true
