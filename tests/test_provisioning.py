@@ -287,7 +287,7 @@ def test_adoption_inspects_workspace_through_privileged_runner(tmp_path: Path) -
     source_commands = [
         command
         for command in runner.privileged_captures
-        if str(source) in command
+        if any(str(source) in argument for argument in command)
     ]
     assert source_commands
     assert any(command[0] == "find" for command in source_commands)
