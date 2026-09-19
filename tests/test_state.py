@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -47,5 +48,27 @@ def test_lock_file_rejects_symlink(tmp_path: Path) -> None:
     (tmp_path / "wazuhdevenv.lock").symlink_to(target)
 
     with pytest.raises(ConfigurationError):
-        with managed_lock(tmp_path):
+        with managed_lock(tmp_path, _user(tmp_path)):
             pass
+
+
+
+def test_root_lock_creation_chowns_open_file_to_invoking_user(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = InvokingUser("test", 1234, 5678, tmp_path)
+    calls: list[tuple[int, int, int]] = []
+
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        os,
+        "fchown",
+        lambda fd, uid, gid: calls.append((fd, uid, gid)),
+    )
+
+    with managed_lock(tmp_path, user):
+        pass
+
+    assert calls
+    assert calls[0][1:] == (1234, 5678)

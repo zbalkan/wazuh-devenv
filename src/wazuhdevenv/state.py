@@ -29,11 +29,13 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
 
 
 @contextmanager
-def managed_lock(path: Path) -> Iterator[None]:
+def managed_lock(path: Path, user: InvokingUser) -> Iterator[None]:
     lock_path = path / "wazuhdevenv.lock"
     if lock_path.is_symlink():
         raise ConfigurationError(f"lock file must not be a symlink: {lock_path}")
     with lock_path.open("a+", encoding="utf-8") as stream:
+        if os.geteuid() == 0 and user.uid != 0:
+            os.fchown(stream.fileno(), user.uid, user.gid)
         try:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:

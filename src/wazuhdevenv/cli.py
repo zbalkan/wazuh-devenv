@@ -90,7 +90,7 @@ def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
 
 def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     workspace = resolve_workspace(args.path)
-    with managed_lock(home):
+    with managed_lock(home, user):
         LOG.info("Provisioning workspace: %s", workspace)
         version = initialize(
             workspace,
