@@ -245,6 +245,15 @@ def _remove_managed_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
+def _corpus_tree_is_symlink_free(root: Path) -> bool:
+    for current, directories, files in os.walk(root, followlinks=False):
+        directory = Path(current)
+        for name in (*directories, *files):
+            if (directory / name).is_symlink():
+                return False
+    return True
+
+
 def _current_corpus_is_managed(home: Path) -> bool:
     current = home / "current-corpus"
     if not current.is_symlink():
@@ -256,7 +265,14 @@ def _current_corpus_is_managed(home: Path) -> bool:
         return False
     if target.parent != corpora:
         return False
-    return (target / "tests").is_dir() and (target / "manifest.json").is_file()
+
+    tests = target / "tests"
+    manifest = target / "manifest.json"
+    if tests.is_symlink() or manifest.is_symlink():
+        return False
+    if not tests.is_dir() or not manifest.is_file():
+        return False
+    return _corpus_tree_is_symlink_free(target)
 
 
 def _validate_legacy_backup(path: Path, *, directory: bool) -> None:
