@@ -227,7 +227,11 @@ def test_initialize_rolls_back_after_post_stop_failure(
     monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
     monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: events.append("workspace"))
     monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: events.append("venv"))
-    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: events.append("preflight"))
+    monkeypatch.setattr(
+        provisioning,
+        "preflight_bind_mounts",
+        lambda *args, **kwargs: events.append("preflight"),
+    )
     monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: True)
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: snapshot)
     monkeypatch.setattr(
@@ -250,7 +254,7 @@ def test_initialize_rolls_back_after_post_stop_failure(
     monkeypatch.setattr(
         provisioning,
         "configure_bind_mounts",
-        lambda *args: events.append("mounts"),
+        lambda *args, **kwargs: events.append("mounts"),
     )
     monkeypatch.setattr(
         provisioning,
