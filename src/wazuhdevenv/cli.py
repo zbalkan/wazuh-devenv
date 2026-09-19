@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .corpus import resolve_release, update_corpus
-from .errors import ConfigurationError, WazuhDevenvError
+from .errors import ConfigurationError, CorpusError, WazuhDevenvError
 from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
@@ -112,8 +112,16 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
         LOG.info("Wazuh Manager ready: %s", version)
         if not args.skip_corpus:
             tester_version = _workspace_wazuhtester_version(user, home)
-            corpus = update_corpus(home, version, tester_version, user)
-            LOG.info("Managed rule-test corpus ready: %s", corpus)
+            try:
+                corpus = update_corpus(home, version, tester_version, user)
+            except CorpusError as exc:
+                LOG.warning(
+                    "Wazuh is ready, but the default rule-test corpus could not be installed: %s. "
+                    "Run 'wazuhdevenv update' later.",
+                    exc,
+                )
+            else:
+                LOG.info("Managed rule-test corpus ready: %s", corpus)
     return 0
 
 
@@ -135,6 +143,11 @@ def main(argv: list[str] | None = None) -> int:
     logging_ready = False
 
     try:
+        if os.geteuid() == 0:
+            raise ConfigurationError(
+                "run wazuhdevenv as the developer, not as root; "
+                "the tool invokes sudo only for system changes"
+            )
         user = InvokingUser.current()
         home = managed_home(user)
         ensure_managed_home(home, user)
