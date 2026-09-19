@@ -314,30 +314,39 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
-def test_group_membership_is_added_only_when_needed() -> None:
-    class GroupRunner:
-        def __init__(self, groups: str) -> None:
-            self.groups = groups
-            self.commands: list[list[str]] = []
+def test_workspace_permissions_keep_invoking_user_as_owner(tmp_path: Path) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir()
+    user = InvokingUser("tester", 1000, 1000, tmp_path)
 
-        def capture(self, args: list[str], **kwargs: object) -> str:
-            del args, kwargs
-            return self.groups
+    provisioning.configure_permissions(runner, workspace, user)
 
-        def run(self, args: list[str], **kwargs: object) -> SimpleNamespace:
-            del kwargs
-            self.commands.append(args)
-            return SimpleNamespace(returncode=0)
-
-    user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
-    existing = GroupRunner("tester wazuh")
-    missing = GroupRunner("tester")
-
-    provisioning.ensure_group_membership(existing, user)
-    provisioning.ensure_group_membership(missing, user)
-
-    assert existing.commands == []
-    assert missing.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
+    for name in ("rules", "decoders"):
+        path = str(workspace / name)
+        assert [
+            "find",
+            path,
+            "-type",
+            "d",
+            "-exec",
+            "chown",
+            "tester:wazuh",
+            "{}",
+            "+",
+        ] in runner.commands
+        assert [
+            "find",
+            path,
+            "-type",
+            "f",
+            "-exec",
+            "chown",
+            "tester:wazuh",
+            "{}",
+            "+",
+        ] in runner.commands
 
 
 def test_initialize_rejects_second_init_before_provisioning(
@@ -409,7 +418,6 @@ def test_initialize_checks_service_manager_before_install(
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
     monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
     monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
-    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: events.append("group"))
     monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: events.append("stop") or False)
     monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: events.append("ossec"))
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: events.append("windows"))
@@ -458,7 +466,6 @@ def test_failed_host_configuration_uses_small_rollback_boundary(
     monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
     monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
     monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
-    monkeypatch.setattr(provisioning, "ensure_group_membership", lambda *args: None)
     monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
     monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
