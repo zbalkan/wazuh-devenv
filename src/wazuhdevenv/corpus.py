@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 import shutil
 import stat
 import sys
@@ -18,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from .errors import CorpusError
 from .paths import InvokingUser
@@ -58,13 +59,17 @@ def _request(url: str, *, authenticated: bool = False) -> bytes:
         raise CorpusError(f"failed to download {url}: {exc}") from exc
 
 
-def _release_key(value: str) -> tuple[int, int, int]:
+def _release_key(value: str) -> tuple[Version, int]:
+    series, separator, revision = value.rpartition("-r")
+    if not separator or not revision.isdigit():
+        raise CorpusError(f"invalid corpus version: {value}")
     try:
-        series, revision = value.split("-r", 1)
-        major, minor = series.split(".", 1)
-        return int(major), int(minor), int(revision)
-    except (ValueError, AttributeError) as exc:
+        parsed = Version(series)
+    except InvalidVersion as exc:
         raise CorpusError(f"invalid corpus version: {value}") from exc
+    if parsed.is_prerelease or parsed.is_devrelease:
+        raise CorpusError(f"invalid corpus version: {value}")
+    return parsed, int(revision)
 
 
 def _asset_url(release: dict[str, object], name: str) -> str | None:
@@ -93,8 +98,10 @@ def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelea
     if not isinstance(releases, list):
         raise CorpusError("unexpected GitHub release response")
 
-    compatible: list[CorpusRelease] = []
+    compatible: list[tuple[tuple[Version, int], CorpusRelease]] = []
     current = Version(wazuh_version)
+    mismatch_counts = {"wazuh": 0, "python": 0, "wazuhtester": 0, "version": 0}
+    inspected_manifests = 0
 
     for release in releases:
         if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
@@ -108,29 +115,55 @@ def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelea
             continue
         if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
             continue
+        inspected_manifests += 1
         if not _matches_requirement(manifest, "wazuh", str(current)):
+            mismatch_counts["wazuh"] += 1
             continue
-        if not _matches_requirement(manifest, "python", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"):
+        if not _matches_requirement(
+            manifest,
+            "python",
+            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        ):
+            mismatch_counts["python"] += 1
             continue
         if not _matches_requirement(manifest, "wazuhtester", wazuhtester_version):
+            mismatch_counts["wazuhtester"] += 1
             continue
 
         version = str(manifest.get("corpus_version", ""))
+        try:
+            version_key = _release_key(version)
+        except CorpusError:
+            mismatch_counts["version"] += 1
+            continue
+
         archive_url = _asset_url(release, f"wazuh-rule-tests-{version}.zip")
         checksum_url = _asset_url(release, f"wazuh-rule-tests-{version}.zip.sha256")
         if archive_url and checksum_url:
-            compatible.append(CorpusRelease(manifest, manifest_url, archive_url, checksum_url))
+            compatible.append(
+                (
+                    version_key,
+                    CorpusRelease(manifest, manifest_url, archive_url, checksum_url),
+                )
+            )
 
     if not compatible:
+        detail = (
+            f"inspected {inspected_manifests} manifests; "
+            f"Wazuh mismatches={mismatch_counts['wazuh']}, "
+            f"Python mismatches={mismatch_counts['python']}, "
+            f"wazuhtester mismatches={mismatch_counts['wazuhtester']}, "
+            f"invalid corpus versions={mismatch_counts['version']}"
+        )
         raise CorpusError(
             "no released rule-test corpus is compatible with "
             f"Wazuh {wazuh_version}, Python {sys.version_info.major}.{sys.version_info.minor}, "
-            f"and wazuhtester {wazuhtester_version}"
+            f"and wazuhtester {wazuhtester_version}; {detail}"
         )
-    return max(compatible, key=lambda item: _release_key(item.version))
+    return max(compatible, key=lambda item: item[0])[1]
 
 
-def _verify_checksum(archive: Path, checksum_text: str) -> None:
+def _verify_checksum(archive: Path, checksum_text: str) -> str:
     fields = checksum_text.strip().split()
     if not fields:
         raise CorpusError("invalid SHA-256 checksum asset")
@@ -140,6 +173,7 @@ def _verify_checksum(archive: Path, checksum_text: str) -> None:
     actual = hashlib.sha256(archive.read_bytes()).hexdigest()
     if actual != expected:
         raise CorpusError(f"corpus checksum mismatch: expected {expected}, got {actual}")
+    return actual
 
 
 def _validate_member(info: zipfile.ZipInfo) -> None:
@@ -193,6 +227,46 @@ def _write_owned_bytes(path: Path, content: bytes, user: InvokingUser) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _atomic_symlink(link: Path, target: str, user: InvokingUser) -> None:
+    temporary = link.parent / f".{link.name}.{secrets.token_hex(16)}"
+    try:
+        os.symlink(target, temporary)
+        if os.geteuid() == 0 and user.uid != 0:
+            os.lchown(temporary, user.uid, user.gid)
+        os.replace(temporary, link)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _prepare_corpus_accessors(
+    home: Path,
+    user: InvokingUser,
+) -> tuple[Path | None, Path | None]:
+    tests = home / "tests"
+    manifest = home / "corpus-manifest.json"
+    legacy_tests = home / "tests.legacy"
+    legacy_manifest = home / "corpus-manifest.legacy.json"
+
+    moved_tests: Path | None = None
+    moved_manifest: Path | None = None
+
+    if os.path.lexists(tests) and not tests.is_symlink():
+        if legacy_tests.exists():
+            raise CorpusError(f"legacy corpus backup already exists: {legacy_tests}")
+        os.replace(tests, legacy_tests)
+        moved_tests = legacy_tests
+
+    if os.path.lexists(manifest) and not manifest.is_symlink():
+        if legacy_manifest.exists():
+            raise CorpusError(f"legacy corpus manifest backup already exists: {legacy_manifest}")
+        os.replace(manifest, legacy_manifest)
+        moved_manifest = legacy_manifest
+
+    _atomic_symlink(tests, "current-corpus/tests", user)
+    _atomic_symlink(manifest, "current-corpus/manifest.json", user)
+    return moved_tests, moved_manifest
+
+
 def install_release(
     home: Path,
     release: CorpusRelease,
@@ -202,23 +276,32 @@ def install_release(
 ) -> None:
     cache = home / "cache"
     staging_root = home / "staging"
-    cache.mkdir(parents=True, exist_ok=True)
-    staging_root.mkdir(parents=True, exist_ok=True)
+    corpora_root = home / "corpora"
+    for directory in (cache, staging_root, corpora_root):
+        if directory.is_symlink():
+            raise CorpusError(f"managed corpus directory must not be a symlink: {directory}")
+        directory.mkdir(parents=True, exist_ok=True)
 
     archive = cache / f"wazuh-rule-tests-{release.version}.zip"
     _write_owned_bytes(archive, _request(release.archive_url), user)
-    _verify_checksum(archive, _request(release.checksum_url).decode("ascii", errors="strict"))
+    digest = _verify_checksum(
+        archive,
+        _request(release.checksum_url).decode("ascii", errors="strict"),
+    )
 
     staging = Path(tempfile.mkdtemp(prefix="corpus.", dir=staging_root))
-    active = home / "tests"
-    previous = home / "tests.previous"
-    manifest_target = home / "corpus-manifest.json"
-    previous_manifest = home / "corpus-manifest.previous.json"
-    temporary_manifest: Path | None = None
-    activated = False
-    had_previous = False
-    manifest_activated = False
-    had_previous_manifest = False
+    release_root = corpora_root / f"{release.version}-{digest[:12]}"
+    current_link = home / "current-corpus"
+    old_current_target = (
+        os.readlink(current_link) if current_link.is_symlink() else None
+    )
+    if os.path.lexists(current_link) and not current_link.is_symlink():
+        raise CorpusError(f"current corpus pointer must be a symlink: {current_link}")
+
+    moved_tests: Path | None = None
+    moved_manifest: Path | None = None
+    pointer_swapped = False
+    release_created = False
     try:
         _safe_extract(archive, staging)
         embedded_path = staging / "manifest.json"
@@ -229,37 +312,29 @@ def install_release(
         if embedded != release.manifest:
             raise CorpusError("standalone and embedded corpus manifests differ")
 
-        if previous.exists():
-            shutil.rmtree(previous)
-        if active.exists():
-            os.replace(active, previous)
-            had_previous = True
-        os.replace(tests_path, active)
-        activated = True
-
-        temporary_manifest = _write_owned_temp(
-            home,
-            ".corpus-manifest.",
-            (json.dumps(release.manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
-            user,
-        )
-        if previous_manifest.exists():
-            previous_manifest.unlink()
-        if manifest_target.exists():
-            os.replace(manifest_target, previous_manifest)
-            had_previous_manifest = True
-        os.replace(temporary_manifest, manifest_target)
-        temporary_manifest = None
-        manifest_activated = True
+        if release_root.exists():
+            shutil.rmtree(staging)
+            staging = Path()
+        else:
+            os.replace(staging, release_root)
+            staging = Path()
+            release_created = True
 
         if os.geteuid() == 0 and user.uid != 0:
-            for root, directories, files in os.walk(active):
+            for root, directories, files in os.walk(release_root):
                 os.chown(root, user.uid, user.gid)
                 for name in directories:
                     os.chown(Path(root) / name, user.uid, user.gid)
                 for name in files:
                     os.chown(Path(root) / name, user.uid, user.gid)
-            os.chown(manifest_target, user.uid, user.gid)
+
+        moved_tests, moved_manifest = _prepare_corpus_accessors(home, user)
+        _atomic_symlink(
+            current_link,
+            os.path.relpath(release_root, home),
+            user,
+        )
+        pointer_swapped = True
 
         state = load_state(home)
         state.update(
@@ -267,39 +342,45 @@ def install_release(
                 "wazuh_version": wazuh_version,
                 "active_corpus": release.version,
                 "wazuhtester_version": wazuhtester_version,
-                "corpus_installed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                "corpus_installed_at": datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat(),
             }
         )
         save_state(home, state, user)
     except Exception:
-        if activated and active.exists():
-            shutil.rmtree(active)
-        if had_previous and previous.exists():
-            os.replace(previous, active)
-        if manifest_activated and manifest_target.exists():
-            manifest_target.unlink()
-        if had_previous_manifest and previous_manifest.exists():
-            os.replace(previous_manifest, manifest_target)
+        if pointer_swapped:
+            if old_current_target is None:
+                current_link.unlink(missing_ok=True)
+            else:
+                _atomic_symlink(current_link, old_current_target, user)
+
+        if old_current_target is None:
+            for accessor in (home / "tests", home / "corpus-manifest.json"):
+                if accessor.is_symlink():
+                    accessor.unlink()
+            if moved_tests is not None and moved_tests.exists():
+                os.replace(moved_tests, home / "tests")
+            if moved_manifest is not None and moved_manifest.exists():
+                os.replace(moved_manifest, home / "corpus-manifest.json")
+
+        if release_created and release_root.exists():
+            shutil.rmtree(release_root, ignore_errors=True)
         raise
     else:
-        if previous.exists():
+        for legacy in (moved_tests, moved_manifest):
+            if legacy is None or not legacy.exists():
+                continue
             try:
-                shutil.rmtree(previous)
+                if legacy.is_dir():
+                    shutil.rmtree(legacy)
+                else:
+                    legacy.unlink()
             except OSError as exc:
-                LOG.warning("Could not remove previous corpus backup %s: %s", previous, exc)
-        try:
-            previous_manifest.unlink(missing_ok=True)
-        except OSError as exc:
-            LOG.warning(
-                "Could not remove previous corpus manifest backup %s: %s",
-                previous_manifest,
-                exc,
-            )
+                LOG.warning("Could not remove legacy corpus backup %s: %s", legacy, exc)
     finally:
-        if temporary_manifest is not None:
-            temporary_manifest.unlink(missing_ok=True)
-        shutil.rmtree(staging, ignore_errors=True)
-
+        if staging and staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
 
 def update_corpus(
     home: Path,
