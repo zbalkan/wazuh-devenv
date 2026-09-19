@@ -728,7 +728,7 @@ def ensure_workspace_venv(runner: CommandRunner, workspace: Path) -> None:
     python = venv / "bin/python"
     if not python.exists():
         raise ConfigurationError(f"virtual environment Python not found: {python}")
-    tester_spec = os.environ.get("WAZUHTESTER_SPEC", "wazuhtester>=0.1,<0.2")
+    tester_spec = os.environ.get("WAZUHTESTER_SPEC", "wazuhtester>=0.1.0rc1,<0.2")
     runner.run_as_user([str(python), "-m", "pip", "install", "--upgrade", "pip"])
     runner.run_as_user([str(python), "-m", "pip", "install", "pytest>=8,<10", tester_spec])
 
