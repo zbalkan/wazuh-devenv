@@ -767,3 +767,76 @@ def test_nested_symlink_in_current_corpus_does_not_authorize_backup_cleanup(
     assert not (home / "tests").is_symlink()
     assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
     assert not (home / "corpus-manifest.json").is_symlink()
+
+
+
+def test_corpus_tree_traversal_error_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "release"
+    (root / "tests").mkdir(parents=True)
+    (root / "manifest.json").write_text("{}\n", encoding="utf-8")
+
+    def failing_walk(
+        top: object,
+        *,
+        followlinks: bool = False,
+        onerror: object = None,
+    ) -> object:
+        del followlinks
+        yield str(top), ["tests"], ["manifest.json"]
+        assert callable(onerror)
+        onerror(PermissionError(13, "Permission denied", str(root / "tests")))
+
+    monkeypatch.setattr(os, "walk", failing_walk)
+
+    assert corpus._corpus_tree_is_symlink_free(root) is False
+
+
+def test_unreadable_current_corpus_preserves_legacy_backups(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    release = home / "corpora/release"
+    (release / "tests").mkdir(parents=True)
+    (release / "manifest.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r2"}\n',
+        encoding="utf-8",
+    )
+    (home / "current-corpus").symlink_to("corpora/release")
+    (home / "tests").symlink_to("current-corpus/tests")
+    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
+    (home / "tests.legacy").mkdir()
+    (home / "tests.legacy/old.py").write_text("old\n", encoding="utf-8")
+    (home / "corpus-manifest.legacy.json").write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
+        encoding="utf-8",
+    )
+
+    real_walk = os.walk
+
+    def failing_walk(
+        top: object,
+        *,
+        followlinks: bool = False,
+        onerror: object = None,
+    ) -> object:
+        if Path(top) == release:
+            yield str(release), ["tests"], ["manifest.json"]
+            assert callable(onerror)
+            onerror(PermissionError(13, "Permission denied", str(release / "tests")))
+            return
+        yield from real_walk(top, followlinks=followlinks, onerror=onerror)
+
+    monkeypatch.setattr(os, "walk", failing_walk)
+
+    corpus._recover_legacy_accessors(home)
+
+    assert not (home / "tests").is_symlink()
+    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
+    assert not (home / "corpus-manifest.json").is_symlink()
+    assert json.loads(
+        (home / "corpus-manifest.json").read_text(encoding="utf-8")
+    )["corpus_version"] == "4.14.8-r1"

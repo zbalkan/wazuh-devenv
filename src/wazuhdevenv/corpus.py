@@ -246,12 +246,23 @@ def _remove_managed_path(path: Path) -> None:
 
 
 def _corpus_tree_is_symlink_free(root: Path) -> bool:
-    for current, directories, files in os.walk(root, followlinks=False):
+    traversal_failed = False
+
+    def onerror(error: OSError) -> None:
+        nonlocal traversal_failed
+        traversal_failed = True
+
+    for current, directories, files in os.walk(
+        root,
+        followlinks=False,
+        onerror=onerror,
+    ):
         directory = Path(current)
         for name in (*directories, *files):
             if (directory / name).is_symlink():
                 return False
-    return True
+
+    return not traversal_failed
 
 
 def _current_corpus_is_managed(home: Path) -> bool:
