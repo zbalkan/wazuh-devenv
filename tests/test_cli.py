@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+
+import wazuhdevenv.cli as cli
+from wazuhdevenv.corpus import CorpusRelease
+from wazuhdevenv.paths import InvokingUser
+
+
+def _user(tmp_path: Path) -> InvokingUser:
+    return InvokingUser("test", 1000, 1000, tmp_path)
+
+
+@pytest.mark.parametrize("check", [False, True])
+def test_update_command_passes_invoking_user_to_managed_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    check: bool,
+) -> None:
+    user = _user(tmp_path)
+    home = tmp_path / "managed"
+    home.mkdir()
+    lock_calls: list[tuple[Path, InvokingUser]] = []
+
+    @contextmanager
+    def fake_lock(path: Path, owner: InvokingUser):
+        lock_calls.append((path, owner))
+        yield
+
+    release = CorpusRelease(
+        manifest={"wazuh": {"requires": "==4.14.8"}},
+        manifest_url="manifest",
+        archive_url="archive",
+        checksum_url="checksum",
+    )
+    object.__setattr__(release, "manifest", {
+        "schema_version": 1,
+        "corpus_version": "4.14.8-r1",
+        "wazuh": {"requires": "==4.14.8"},
+    })
+
+    monkeypatch.setattr(cli, "managed_lock", fake_lock)
+    monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.8")
+    monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
+    monkeypatch.setattr(cli, "resolve_release", lambda *args: release)
+    monkeypatch.setattr(cli, "update_corpus", lambda *args: "4.14.8-r1")
+
+    assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
+    assert lock_calls == [(home, user)]
