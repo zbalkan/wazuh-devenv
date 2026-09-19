@@ -16,10 +16,12 @@ class RecordingRunner:
     def __init__(self, *, find_output: str = "") -> None:
         self.find_output = find_output
         self.commands: list[list[str]] = []
+        self.find_targets: list[Path] = []
 
     def capture(self, args: list[str], *, privileged: bool = False) -> str:
         del privileged
         if args[0] == "find":
+            self.find_targets.append(Path(args[1]))
             return self.find_output
         raise AssertionError(f"unexpected capture command: {args}")
 
@@ -186,10 +188,13 @@ def test_default_wazuh_content_is_accepted(
 ) -> None:
     runner = RecordingRunner(find_output=find_output)
 
+    target = tmp_path / target_name
     provisioning._require_default_wazuh_content(
         runner,
-        tmp_path / target_name,
+        target,
     )
+
+    assert runner.find_targets == [target]
 
 
 @pytest.mark.parametrize(
@@ -212,10 +217,59 @@ def test_existing_custom_wazuh_content_is_rejected(
         ConfigurationError,
         match="expects a fresh/default development installation",
     ):
+        target = tmp_path / target_name
         provisioning._require_default_wazuh_content(
             runner,
-            tmp_path / target_name,
+            target,
         )
+
+    assert runner.find_targets == [target]
+
+
+def test_configure_bind_mounts_checks_wazuh_directories_before_mounting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, Path]] = []
+    mounted: set[Path] = set()
+
+    class BindRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del privileged, check
+            if args[:2] == ["mountpoint", "-q"]:
+                return SimpleNamespace(returncode=0 if Path(args[2]) in mounted else 1)
+            if args[:2] == ["mount", "--bind"]:
+                target = Path(args[3])
+                events.append(("mount", target))
+                mounted.add(target)
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+    def require_default(runner: object, target: Path) -> None:
+        del runner
+        events.append(("check", target))
+
+    monkeypatch.setattr(provisioning, "_require_default_wazuh_content", require_default)
+    monkeypatch.setattr(provisioning, "_ensure_fstab", lambda *args: None)
+
+    provisioning.configure_bind_mounts(BindRunner(), tmp_path / "workspace")
+
+    expected = [
+        provisioning.WAZUH_HOME / "etc/rules",
+        provisioning.WAZUH_HOME / "etc/decoders",
+    ]
+    assert events == [
+        ("check", expected[0]),
+        ("mount", expected[0]),
+        ("check", expected[1]),
+        ("mount", expected[1]),
+    ]
 
 
 def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
