@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
@@ -27,10 +28,17 @@ def ensure_managed_home(path: Path) -> None:
 @contextmanager
 def managed_lock(path: Path) -> Iterator[None]:
     lock_path = path / "wazuhdevenv.lock"
-    if lock_path.is_symlink():
-        raise ConfigurationError(f"lock file must not be a symlink: {lock_path}")
+    flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ConfigurationError(
+                f"lock file must not be a symlink: {lock_path}"
+            ) from exc
+        raise
 
-    with lock_path.open("a+", encoding="utf-8") as stream:
+    with os.fdopen(fd, "a+", encoding="utf-8") as stream:
         try:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
