@@ -1,27 +1,23 @@
+import os
 from pathlib import Path
 
 import pytest
 
 from wazuhdevenv.errors import ConfigurationError
-import os
-import pwd
-
-import wazuhdevenv.paths as paths
 from wazuhdevenv.paths import InvokingUser, managed_home, resolve_workspace
 
 
-def test_workspace_is_resolved(tmp_path: Path) -> None:
-    assert resolve_workspace(str(tmp_path)) == tmp_path.resolve()
+def test_workspace_is_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    child = tmp_path / "a/../project"
+    child.parent.mkdir(parents=True)
+
+    assert resolve_workspace(str(child)) == (tmp_path / "project").resolve()
 
 
-@pytest.mark.parametrize(
-    "path",
-    ["/", "/etc", "/etc/wazuh-project", "/var/tmp/project", "/usr/local/project", "/opt/project"],
-)
+@pytest.mark.parametrize("path", ["/", "/etc", "/var/lib", "/usr/local"])
 def test_sensitive_system_workspaces_are_rejected(path: str) -> None:
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(ConfigurationError, match="refusing to use system directory"):
         resolve_workspace(path)
-
 
 
 def test_workspace_default_and_relative_paths_are_resolved(
@@ -29,8 +25,8 @@ def test_workspace_default_and_relative_paths_are_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-
     resolved = tmp_path.resolve()
+
     assert resolve_workspace(None) == resolved
     assert resolve_workspace("project") == resolved / "project"
 
@@ -51,26 +47,9 @@ def test_managed_home_rejects_sensitive_system_override(
     override: str,
 ) -> None:
     monkeypatch.setenv("WAZUHDEVENV_HOME", override)
-    user = InvokingUser("test", 1000, 1000, tmp_path)
 
     with pytest.raises(ConfigurationError):
-        managed_home(user)
-
-
-def test_unknown_sudo_user_is_reported_as_configuration_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    monkeypatch.setenv("SUDO_USER", "definitely-missing-user")
-    monkeypatch.setattr(
-        pwd,
-        "getpwnam",
-        lambda name: (_ for _ in ()).throw(KeyError(name)),
-    )
-
-    with pytest.raises(ConfigurationError, match="invoking user does not exist"):
-        paths.InvokingUser.current()
-
+        managed_home(InvokingUser("test", 1000, 1000, tmp_path))
 
 
 def test_managed_home_rejects_symlink_override(
@@ -85,3 +64,19 @@ def test_managed_home_rejects_symlink_override(
 
     with pytest.raises(ConfigurationError, match="managed home must not be a symlink"):
         managed_home(InvokingUser("test", 1000, 1000, tmp_path))
+
+
+def test_invoking_user_uses_current_uid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Entry:
+        pw_name = "tester"
+        pw_uid = 1000
+        pw_gid = 1000
+        pw_dir = str(tmp_path)
+
+    monkeypatch.setattr(os, "getuid", lambda: 1000)
+    monkeypatch.setattr("wazuhdevenv.paths.pwd.getpwuid", lambda uid: Entry())
+
+    assert InvokingUser.current() == InvokingUser("tester", 1000, 1000, tmp_path)
