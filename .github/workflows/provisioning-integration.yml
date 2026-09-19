@@ -50,7 +50,7 @@ jobs:
           test -f "$WAZUHDEVENV_HOME/state.json"
           sudo mountpoint -q /var/ossec/etc/rules
           sudo mountpoint -q /var/ossec/etc/decoders
-          "$WORKSPACE/.venv/bin/python" -c "import wazuhtester; print(wazuhtester.__version__)"
+          "$WORKSPACE/.venv/bin/python" -c "import importlib.metadata as m; v=m.version('wazuhtester'); assert v == '0.1.0rc1', v; print(v)"
 
       - name: Second init must converge
         run: |

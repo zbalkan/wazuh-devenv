@@ -631,3 +631,64 @@ def test_legacy_cleanup_failure_keeps_new_state_and_content(
     assert (legacy_tests / "old.py").read_text(encoding="utf-8") == "old\n"
     assert not (home / "corpus-manifest.legacy.json").exists()
     assert "Could not remove legacy corpus backup" in caplog.text
+
+
+
+def test_external_current_corpus_does_not_authorize_legacy_cleanup(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    external = tmp_path / "external-corpus"
+    (external / "tests").mkdir(parents=True)
+    (external / "manifest.json").write_text(
+        '{"schema_version": 1, "corpus_version": "external"}\n',
+        encoding="utf-8",
+    )
+    (home / "current-corpus").symlink_to(external, target_is_directory=True)
+    (home / "tests").symlink_to("current-corpus/tests")
+    (home / "corpus-manifest.json").symlink_to("current-corpus/manifest.json")
+
+    legacy_tests = home / "tests.legacy"
+    legacy_tests.mkdir()
+    (legacy_tests / "old.py").write_text("old\n", encoding="utf-8")
+    legacy_manifest = home / "corpus-manifest.legacy.json"
+    legacy_manifest.write_text(
+        '{"schema_version": 1, "corpus_version": "4.14.8-r1"}\n',
+        encoding="utf-8",
+    )
+
+    corpus._recover_legacy_accessors(home)
+
+    assert not (home / "tests").is_symlink()
+    assert (home / "tests/old.py").read_text(encoding="utf-8") == "old\n"
+    assert not (home / "corpus-manifest.json").is_symlink()
+    assert json.loads(
+        (home / "corpus-manifest.json").read_text(encoding="utf-8")
+    )["corpus_version"] == "4.14.8-r1"
+    assert external.is_dir()
+
+
+@pytest.mark.parametrize(
+    ("backup_name", "target_name"),
+    [
+        ("tests.legacy", "tests"),
+        ("corpus-manifest.legacy.json", "corpus-manifest.json"),
+    ],
+)
+def test_symlinked_legacy_backup_is_never_promoted(
+    tmp_path: Path,
+    backup_name: str,
+    target_name: str,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (home / backup_name).symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(CorpusError, match="legacy corpus backup must not be a symlink"):
+        corpus._recover_legacy_accessors(home)
+
+    assert (home / backup_name).is_symlink()
+    assert not os.path.lexists(home / target_name)

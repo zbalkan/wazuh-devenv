@@ -116,3 +116,42 @@ def test_load_state_rejects_non_integer_schema_values(
 
     with pytest.raises(ValueError, match="unsupported state file"):
         load_state(tmp_path)
+
+
+
+def test_managed_lock_uses_open_directory_descriptor_if_path_is_swapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "managed"
+    home.mkdir()
+    original = tmp_path / "managed-original"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    real_open = os.open
+    swapped = False
+
+    def racing_open(
+        path: object,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped
+        if not swapped and dir_fd is None and Path(path) == home:
+            fd = real_open(path, flags, mode)
+            os.replace(home, original)
+            home.symlink_to(outside, target_is_directory=True)
+            swapped = True
+            return fd
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", racing_open)
+
+    with managed_lock(home, _user(tmp_path)):
+        pass
+
+    assert (original / "wazuhdevenv.lock").is_file()
+    assert not (outside / "wazuhdevenv.lock").exists()
