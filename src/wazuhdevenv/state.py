@@ -38,25 +38,47 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
 @contextmanager
 def managed_lock(path: Path, user: InvokingUser) -> Iterator[None]:
     lock_path = path / "wazuhdevenv.lock"
-    flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
-        fd = os.open(lock_path, flags, 0o600)
+        directory_fd = os.open(path, directory_flags)
     except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise ConfigurationError(f"lock file must not be a symlink: {lock_path}") from exc
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ConfigurationError(
+                f"managed home must be a real directory: {path}"
+            ) from exc
         raise
 
-    with os.fdopen(fd, "a+", encoding="utf-8") as stream:
-        if os.geteuid() == 0 and user.uid != 0:
-            os.fchown(stream.fileno(), user.uid, user.gid)
+    try:
+        lock_flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
         try:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError("another wazuhdevenv operation is already running") from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+            fd = os.open(
+                "wazuhdevenv.lock",
+                lock_flags,
+                0o600,
+                dir_fd=directory_fd,
+            )
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise ConfigurationError(
+                    f"lock file must not be a symlink: {lock_path}"
+                ) from exc
+            raise
+
+        with os.fdopen(fd, "a+", encoding="utf-8") as stream:
+            if os.geteuid() == 0 and user.uid != 0:
+                os.fchown(stream.fileno(), user.uid, user.gid)
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError(
+                    "another wazuhdevenv operation is already running"
+                ) from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
 
 
 def _valid_schema_version(value: object) -> bool:

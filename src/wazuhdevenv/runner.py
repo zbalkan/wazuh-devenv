@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from pathlib import Path
 import subprocess
 from collections.abc import Sequence
 
@@ -12,6 +13,13 @@ from .paths import InvokingUser
 
 
 TRUSTED_EXEC_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
+TRUSTED_PRIVILEGED_EXEC_ROOTS = (
+    Path("/usr/bin"),
+    Path("/usr/sbin"),
+    Path("/bin"),
+    Path("/sbin"),
+    Path("/var/ossec/bin"),
+)
 
 
 class CommandRunner:
@@ -28,6 +36,11 @@ class CommandRunner:
     @staticmethod
     def _require_trusted(executable: str) -> str:
         if os.path.isabs(executable):
+            path = Path(executable)
+            if not any(path.parent == root for root in TRUSTED_PRIVILEGED_EXEC_ROOTS):
+                raise CommandError(
+                    f"privileged executable is outside trusted roots: {executable}"
+                )
             return executable
         if "/" in executable:
             raise CommandError(
