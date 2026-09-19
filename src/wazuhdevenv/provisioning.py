@@ -201,23 +201,22 @@ class PackageManager:
     def _setup_apt_repository(self) -> None:
         self._apt_install(["gnupg", "apt-transport-https"])
         keyring = Path("/usr/share/keyrings/wazuh.gpg")
-        if not keyring.exists():
-            key = _download("https://packages.wazuh.com/key/GPG-KEY-WAZUH")
-            try:
-                self.runner.run(
-                    [
-                        "gpg",
-                        "--no-default-keyring",
-                        "--keyring",
-                        "gnupg-ring:/usr/share/keyrings/wazuh.gpg",
-                        "--import",
-                        str(key),
-                    ],
-                    privileged=True,
-                )
-                self.runner.run(["chmod", "0644", str(keyring)], privileged=True)
-            finally:
-                key.unlink(missing_ok=True)
+        key = _download("https://packages.wazuh.com/key/GPG-KEY-WAZUH")
+        try:
+            self.runner.run(
+                [
+                    "gpg",
+                    "--no-default-keyring",
+                    "--keyring",
+                    "gnupg-ring:/usr/share/keyrings/wazuh.gpg",
+                    "--import",
+                    str(key),
+                ],
+                privileged=True,
+            )
+            self.runner.run(["chmod", "0644", str(keyring)], privileged=True)
+        finally:
+            key.unlink(missing_ok=True)
 
         _write_privileged(
             self.runner,
@@ -238,7 +237,6 @@ gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
 enabled=1
 name=EL-$releasever - Wazuh
 baseurl=https://packages.wazuh.com/4.x/yum/
-priority=1
 """
         _write_privileged(self.runner, Path("/etc/yum.repos.d/wazuh.repo"), repo)
 
@@ -816,12 +814,11 @@ def initialize(
         configure_bind_mounts(runner, workspace)
         configure_permissions(runner, workspace)
         validate_wazuh(runner)
+        start_wazuh(runner)
+        wait_for_logtest(runner)
     except Exception:
         _rollback_provisioning(runner, workspace, snapshot)
         raise
-
-    start_wazuh(runner)
-    wait_for_logtest(runner)
 
     state = load_state(home)
     state.update(
