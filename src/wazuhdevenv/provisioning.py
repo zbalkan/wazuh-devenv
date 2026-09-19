@@ -587,23 +587,18 @@ def configure_bind_mounts(
         _ensure_fstab(runner, source, target)
 
 
-def configure_permissions(runner: CommandRunner, workspace: Path) -> None:
+def configure_permissions(
+    runner: CommandRunner,
+    workspace: Path,
+    user: InvokingUser,
+) -> None:
+    owner = f"{user.name}:wazuh"
     for name in ("rules", "decoders"):
         path = workspace / name
-        runner.run(["find", str(path), "-type", "d", "-exec", "chown", "root:wazuh", "{}", "+"], privileged=True)
+        runner.run(["find", str(path), "-type", "d", "-exec", "chown", owner, "{}", "+"], privileged=True)
         runner.run(["find", str(path), "-type", "d", "-exec", "chmod", "0770", "{}", "+"], privileged=True)
-        runner.run(["find", str(path), "-type", "f", "-exec", "chown", "wazuh:wazuh", "{}", "+"], privileged=True)
+        runner.run(["find", str(path), "-type", "f", "-exec", "chown", owner, "{}", "+"], privileged=True)
         runner.run(["find", str(path), "-type", "f", "-exec", "chmod", "0660", "{}", "+"], privileged=True)
-
-def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
-    groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
-    if "wazuh" in groups:
-        return
-    runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
-    LOG.warning(
-        "Added %s to wazuh group; a new login shell may be required outside wazuhdevenv",
-        user.name,
-    )
 
 
 def _service_manager() -> str:
@@ -852,12 +847,11 @@ def initialize(
     )
 
     try:
-        ensure_group_membership(runner, user)
         stop_wazuh(runner)
         configure_ossec(runner)
         configure_windows_rule_testing(runner)
         configure_bind_mounts(runner, workspace)
-        configure_permissions(runner, workspace)
+        configure_permissions(runner, workspace, user)
         validate_wazuh(runner)
         start_wazuh(runner)
         wait_for_logtest(runner)

@@ -71,8 +71,7 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - expects a fresh/default Wazuh rules/decoders installation, ignores Wazuh's disposable `local_rules.xml` and `local_decoder.xml` samples, and refuses to migrate other existing custom content;
 - bind-mounts workspace rules and decoders into `/var/ossec/etc`;
 - persists the mounts in `/etc/fstab`;
-- configures ownership and permissions;
-- adds the invoking user to the `wazuh` group when required;
+- keeps the invoking developer as owner of workspace rules and decoders while granting the `wazuh` group access;
 - validates Wazuh configuration using Wazuh's own `-t` checks;
 - backs up and restores the Wazuh configuration, Windows testing rule, fstab entries, and newly created bind mounts if host configuration fails;
 - starts the manager and waits for a stable logtest socket;
