@@ -121,18 +121,24 @@ def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) ->
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    user = InvokingUser.current()
-    home = managed_home(user)
-    ensure_managed_home(home, user)
-    _configure_logging(home, user, args.verbose)
+    logging_ready = False
 
     try:
+        user = InvokingUser.current()
+        home = managed_home(user)
+        ensure_managed_home(home, user)
+        _configure_logging(home, user, args.verbose)
+        logging_ready = True
+
         if args.command == "init":
             return _init_command(args, user, home)
         if args.command == "update":
             return _update_command(args, user, home)
     except (WazuhDevenvError, ValueError, OSError, RuntimeError) as exc:
-        LOG.error("%s", exc)
+        if logging_ready:
+            LOG.error("%s", exc)
+        else:
+            print(f"wazuhdevenv: {exc}", file=sys.stderr)
         return 1
 
     return 2
