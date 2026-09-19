@@ -25,7 +25,13 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
             raise ConfigurationError(f"managed state directory must not be a symlink: {child}")
         child.mkdir(exist_ok=True)
     if os.geteuid() == 0 and user.uid != 0:
-        for item in (path, path / "cache", path / "staging", path / "logs"):
+        for item in (
+            path,
+            path / "cache",
+            path / "staging",
+            path / "corpora",
+            path / "logs",
+        ):
             os.chown(item, user.uid, user.gid)
 
 

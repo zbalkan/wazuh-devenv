@@ -19,17 +19,19 @@ from wazuhdevenv.paths import InvokingUser
 
 def test_release_key_orders_corpus_revisions() -> None:
     assert _release_key("4.14-r2") > _release_key("4.14-r1")
-    assert _release_key("4.15-r1") > _release_key("4.14-r99")
+    assert _release_key("4.14.8-r2") > _release_key("4.14.8-r1")
+    assert _release_key("4.15-r1") > _release_key("4.14.99-r99")
 
 
 def test_manifest_requirement_matching() -> None:
     manifest = {
         "wazuh": {"requires": ">=4.14.7,<4.15.0"},
         "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": ">=0.1,<0.2"},
+        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
     }
     assert _matches_requirement(manifest, "wazuh", "4.14.7")
     assert not _matches_requirement(manifest, "wazuh", "4.15.0")
+    assert _matches_requirement(manifest, "wazuhtester", "0.1.0rc1")
     assert _matches_requirement(manifest, "wazuhtester", "0.1.0")
     assert not _matches_requirement(manifest, "wazuhtester", "0.2.0")
 
@@ -232,63 +234,162 @@ def test_atomic_owned_write_replaces_symlink_without_following_it(
     assert target.read_bytes() == b"new archive"
 
 
-def test_post_commit_backup_cleanup_failure_keeps_new_state_and_content(
+
+
+
+def _release_metadata(version: str, manifest_url: str) -> dict[str, object]:
+    return {
+        "draft": False,
+        "prerelease": False,
+        "assets": [
+            {"name": "manifest.json", "browser_download_url": manifest_url},
+            {
+                "name": f"wazuh-rule-tests-{version}.zip",
+                "browser_download_url": f"archive-{version}",
+            },
+            {
+                "name": f"wazuh-rule-tests-{version}.zip.sha256",
+                "browser_download_url": f"checksum-{version}",
+            },
+        ],
+    }
+
+
+def _manifest(version: str, *, tester: str = ">=0.1.0rc1,<0.2") -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "corpus_version": version,
+        "wazuh": {"requires": "==4.14.8"},
+        "python": {"requires": ">=3.10"},
+        "wazuhtester": {"requires": tester},
+    }
+
+
+def test_resolve_release_selects_highest_compatible_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    releases = [
+        {**_release_metadata("4.14.8-r1", "manifest-r1"), "draft": True},
+        {**_release_metadata("4.14.8-r2", "manifest-r2"), "prerelease": True},
+        _release_metadata("4.14.8-r3", "manifest-r3"),
+        _release_metadata("4.14.8-r4", "manifest-r4"),
+        _release_metadata("unexpected", "manifest-bad"),
+    ]
+    manifests = {
+        "manifest-r3": _manifest("4.14.8-r3"),
+        "manifest-r4": _manifest("4.14.8-r4"),
+        "manifest-bad": _manifest("unexpected"),
+    }
+
+    def request(url: str, *, authenticated: bool = False) -> bytes:
+        del authenticated
+        if url == corpus.RELEASES_API:
+            return json.dumps(releases).encode()
+        return json.dumps(manifests[url]).encode()
+
+    monkeypatch.setattr(corpus, "_request", request)
+
+    release = corpus.resolve_release("4.14.8", "0.1.0rc1")
+
+    assert release.version == "4.14.8-r4"
+
+
+def test_resolve_release_reports_requirement_mismatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    releases = [_release_metadata("4.14.8-r1", "manifest-r1")]
+    manifest = _manifest("4.14.8-r1", tester=">=0.1,<0.2")
+
+    def request(url: str, *, authenticated: bool = False) -> bytes:
+        del authenticated
+        if url == corpus.RELEASES_API:
+            return json.dumps(releases).encode()
+        return json.dumps(manifest).encode()
+
+    monkeypatch.setattr(corpus, "_request", request)
+
+    with pytest.raises(CorpusError, match="wazuhtester mismatches=1"):
+        corpus.resolve_release("4.14.8", "0.1.0rc1")
+
+
+def test_checksum_mismatch_is_rejected(tmp_path: Path) -> None:
+    archive = tmp_path / "corpus.zip"
+    archive.write_bytes(b"content")
+
+    with pytest.raises(CorpusError, match="corpus checksum mismatch"):
+        corpus._verify_checksum(archive, "0" * 64)
+
+
+def _build_archive(tmp_path: Path, manifest: dict[str, object], payload: str) -> bytes:
+    path = tmp_path / f"{manifest['corpus_version']}.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr("tests/test_payload.py", payload)
+    return path.read_bytes()
+
+
+def test_corpus_activation_uses_single_atomic_current_pointer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    for name in ("cache", "staging", "corpora"):
+        (home / name).mkdir(parents=True, exist_ok=True)
+    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
+
+    first_manifest = _manifest("4.14.8-r1")
+    second_manifest = _manifest("4.14.8-r2")
+    first_bytes = _build_archive(tmp_path, first_manifest, "first\n")
+    second_bytes = _build_archive(tmp_path, second_manifest, "second\n")
+    payloads = {
+        "archive-r1": first_bytes,
+        "checksum-r1": hashlib.sha256(first_bytes).hexdigest().encode(),
+        "archive-r2": second_bytes,
+        "checksum-r2": hashlib.sha256(second_bytes).hexdigest().encode(),
+    }
+    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
+
+    first = CorpusRelease(first_manifest, "manifest-r1", "archive-r1", "checksum-r1")
+    second = CorpusRelease(second_manifest, "manifest-r2", "archive-r2", "checksum-r2")
+
+    corpus.install_release(home, first, "4.14.8", user, "0.1.0rc1")
+    first_target = os.readlink(home / "current-corpus")
+    assert (home / "tests").is_symlink()
+    assert (home / "corpus-manifest.json").is_symlink()
+    assert (home / "tests/test_payload.py").read_text() == "first\n"
+
+    corpus.install_release(home, second, "4.14.8", user, "0.1.0rc1")
+    second_target = os.readlink(home / "current-corpus")
+
+    assert second_target != first_target
+    assert (home / "tests/test_payload.py").read_text() == "second\n"
+    assert json.loads((home / "corpus-manifest.json").read_text())["corpus_version"] == "4.14.8-r2"
+
+
+def test_update_corpus_skips_install_for_active_release(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    (home / "cache").mkdir()
-    (home / "staging").mkdir()
-    active = home / "tests"
-    active.mkdir()
-    (active / "old.py").write_text("old\n", encoding="utf-8")
+    target = tmp_path / "active-tests"
+    target.mkdir()
+    (home / "tests").symlink_to(target, target_is_directory=True)
     (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "active_corpus": "4.14-r0"}) + "\n",
+        json.dumps({"schema_version": 1, "active_corpus": "4.14.8-r2"}) + "\n",
         encoding="utf-8",
     )
-
-    manifest = {
-        "schema_version": 1,
-        "corpus_version": "4.14-r1",
-        "wazuh": {"requires": "==4.14.8"},
-        "python": {"requires": ">=3.10"},
-        "wazuhtester": {"requires": ">=0.1.0rc1,<0.2"},
-    }
-    archive_path = tmp_path / "corpus.zip"
-    with zipfile.ZipFile(archive_path, "w") as archive:
-        archive.writestr("manifest.json", json.dumps(manifest))
-        archive.writestr("tests/new.py", "new\n")
-    archive_bytes = archive_path.read_bytes()
-    checksum = hashlib.sha256(archive_bytes).hexdigest().encode("ascii")
-    payloads = {
-        "archive": archive_bytes,
-        "checksum": checksum + b"  corpus.zip\n",
-    }
-    monkeypatch.setattr(corpus, "_request", lambda url, **kwargs: payloads[url])
-
-    previous = home / "tests.previous"
-    real_rmtree = shutil.rmtree
-
-    def fail_backup_cleanup(path: object, *args: object, **kwargs: object) -> None:
-        if Path(path) == previous and previous.exists() and not kwargs.get("ignore_errors"):
-            raise OSError("simulated cleanup failure")
-        real_rmtree(path, *args, **kwargs)
-
-    monkeypatch.setattr(shutil, "rmtree", fail_backup_cleanup)
-
-    release = CorpusRelease(
-        manifest=manifest,
-        manifest_url="manifest",
-        archive_url="archive",
-        checksum_url="checksum",
+    release = CorpusRelease(_manifest("4.14.8-r2"), "manifest", "archive", "checksum")
+    monkeypatch.setattr(corpus, "resolve_release", lambda *args: release)
+    monkeypatch.setattr(
+        corpus,
+        "install_release",
+        lambda *args: (_ for _ in ()).throw(AssertionError("must not install")),
     )
-    user = InvokingUser("test", os.getuid(), os.getgid(), tmp_path)
 
-    corpus.install_release(home, release, "4.14.8", user, "0.1.0rc1")
-
-    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
-    assert state["active_corpus"] == "4.14-r1"
-    assert (home / "tests/new.py").read_text(encoding="utf-8") == "new\n"
-    assert previous.exists()
-    assert (previous / "old.py").read_text(encoding="utf-8") == "old\n"
+    assert corpus.update_corpus(
+        home,
+        "4.14.8",
+        "0.1.0rc1",
+        InvokingUser("test", os.getuid(), os.getgid(), tmp_path),
+    ) == "4.14.8-r2"
