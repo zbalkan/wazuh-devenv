@@ -422,6 +422,7 @@ def test_reinstall_never_reuses_user_writable_corpus_tree(
 
     chowned: list[Path] = []
     monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         os,
         "chown",
