@@ -3,7 +3,7 @@ name: Wazuh provisioning integration
 on:
   workflow_dispatch:
     inputs:
-      wazuh-version:
+      wazuh_version:
         description: Wazuh Manager version to provision
         required: true
         default: "4.14.7"
@@ -34,7 +34,7 @@ jobs:
 
       - name: First init
         run: |
-          wazuhdevenv init "$WORKSPACE"             --wazuh-version "${{ inputs.wazuh-version }}"             --skip-corpus
+          wazuhdevenv init "$WORKSPACE" --wazuh-version "${{ inputs.wazuh_version }}" --skip-corpus
 
       - name: Verify provisioned environment
         run: |
@@ -50,7 +50,7 @@ jobs:
 
       - name: Second init must converge
         run: |
-          wazuhdevenv init "$WORKSPACE"             --wazuh-version "${{ inputs.wazuh-version }}"             --skip-corpus
+          wazuhdevenv init "$WORKSPACE" --wazuh-version "${{ inputs.wazuh_version }}" --skip-corpus
 
       - name: Verify environment after second init
         run: |
