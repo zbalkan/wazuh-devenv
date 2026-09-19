@@ -80,7 +80,7 @@ def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:
     runner = CommandRunner(user)
     code = "from importlib.metadata import version; print(version('wazuhtester'))"
     try:
-        return runner.capture([str(python), "-c", code]).strip()
+        return runner.capture_as_user([str(python), "-c", code]).strip()
     except WazuhDevenvError as exc:
         raise WazuhDevenvError(
             "wazuhtester is not installed in the workspace virtual environment; rerun 'wazuhdevenv init'"
