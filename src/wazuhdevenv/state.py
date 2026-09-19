@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
@@ -31,9 +32,15 @@ def ensure_managed_home(path: Path, user: InvokingUser) -> None:
 @contextmanager
 def managed_lock(path: Path, user: InvokingUser) -> Iterator[None]:
     lock_path = path / "wazuhdevenv.lock"
-    if lock_path.is_symlink():
-        raise ConfigurationError(f"lock file must not be a symlink: {lock_path}")
-    with lock_path.open("a+", encoding="utf-8") as stream:
+    flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ConfigurationError(f"lock file must not be a symlink: {lock_path}") from exc
+        raise
+
+    with os.fdopen(fd, "a+", encoding="utf-8") as stream:
         if os.geteuid() == 0 and user.uid != 0:
             os.fchown(stream.fileno(), user.uid, user.gid)
         try:
@@ -59,7 +66,10 @@ def load_state(path: Path) -> dict[str, object]:
 
 
 def save_state(path: Path, state: dict[str, object], user: InvokingUser) -> None:
-    state = {"schema_version": 1, **state}
+    schema_version = state.get("schema_version", 1)
+    if schema_version != 1:
+        raise ValueError(f"unsupported state schema version: {schema_version}")
+    state = {**state, "schema_version": 1}
     target = path / "state.json"
     fd, temporary_name = tempfile.mkstemp(prefix=".state.", dir=path, text=True)
     temporary = Path(temporary_name)
