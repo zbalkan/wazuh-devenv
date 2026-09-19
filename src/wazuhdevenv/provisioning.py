@@ -447,18 +447,14 @@ def configure_windows_rule_testing(runner: CommandRunner) -> None:
 
 
 def prepare_workspace(workspace: Path, user: InvokingUser) -> None:
-    created_workspace = not workspace.exists()
+    del user
     workspace.mkdir(parents=True, exist_ok=True)
-    if created_workspace and os.geteuid() == 0 and user.uid != 0:
-        os.chown(workspace, user.uid, user.gid)
 
     for name in ("rules", "decoders", "tests"):
         path = workspace / name
         if path.is_symlink():
             raise ConfigurationError(f"workspace {name} path is a symlink: {path}")
         path.mkdir(exist_ok=True)
-        if os.geteuid() == 0 and user.uid != 0:
-            os.chown(path, user.uid, user.gid)
 
 
 def _wazuh_directory_entries(runner: CommandRunner, target: Path) -> list[str]:
@@ -599,8 +595,6 @@ def configure_permissions(runner: CommandRunner, workspace: Path) -> None:
         runner.run(["find", str(path), "-type", "f", "-exec", "chmod", "0660", "{}", "+"], privileged=True)
 
 def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
-    if user.uid == 0:
-        return
     groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" in groups:
         return
