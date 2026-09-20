@@ -333,12 +333,36 @@ def test_update_corpus_skips_active_release(
 
     assert corpus.update_corpus(home, "4.14.8", "0.1.0rc1") == "4.14.8-r2"
 
+def test_update_corpus_normalizes_non_utf8_release_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(corpus, "_request", lambda *args, **kwargs: b"\xff")
+
+    with pytest.raises(CorpusError, match="failed to resolve rule-test corpus"):
+        corpus.update_corpus(home, "4.14.8", "0.1.0rc1")
+
+
+def test_update_corpus_normalizes_invalid_wazuh_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(corpus, "_request", lambda *args, **kwargs: b"[]")
+
+    with pytest.raises(CorpusError, match="failed to resolve rule-test corpus"):
+        corpus.update_corpus(home, "not-a-version", "0.1.0rc1")
+
+
 @pytest.mark.parametrize(
     "error",
     [
         zipfile.BadZipFile("bad zip"),
         json.JSONDecodeError("bad manifest", "{", 0),
-        UnicodeDecodeError("ascii", b"\\xff", 0, 1, "invalid byte"),
+        UnicodeDecodeError("ascii", b"\xff", 0, 1, "invalid byte"),
         OSError("I/O failure"),
     ],
 )

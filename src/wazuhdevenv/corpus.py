@@ -295,7 +295,7 @@ def update_corpus(
         release = resolve_release(wazuh_version, wazuhtester_version)
     except CorpusError:
         raise
-    except (json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
+    except (UnicodeDecodeError, InvalidVersion) as exc:
         raise CorpusError(f"failed to resolve rule-test corpus: {exc}") from exc
 
     state = load_state(home)
