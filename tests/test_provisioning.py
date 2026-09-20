@@ -405,6 +405,8 @@ def test_rpm_dependencies_accept_coreutils_single_commands(
         ) -> SimpleNamespace:
             del check
             if args[:2] == ["rpm", "-q"]:
+                if args[2] not in {"python3", "util-linux", "findutils", "gnupg2"}:
+                    raise AssertionError(f"unexpected RPM dependency probe: {args[2]}")
                 return SimpleNamespace(returncode=1 if args[2] == "gnupg2" else 0)
             if args[:3] == ["dnf", "-y", "install"]:
                 assert privileged is True
