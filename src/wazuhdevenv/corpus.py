@@ -24,7 +24,7 @@ from .errors import CorpusError
 from .state import load_state, save_state
 
 RELEASES_API = "https://api.github.com/repos/zbalkan/wazuh-rule-tests/releases?per_page=100"
-USER_AGENT = "wazuh-devenv"
+USER_AGENT = "wazuhdevenv"
 
 
 @dataclass(frozen=True)

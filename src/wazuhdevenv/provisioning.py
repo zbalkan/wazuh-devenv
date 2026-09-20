@@ -62,7 +62,7 @@ WINDOWS_RULE_EXPECTED = """  <rule id="60000" level="0">
 
 def ensure_linux() -> None:
     if sys.platform != "linux":
-        raise UnsupportedPlatformError("wazuh-devenv supports Linux only; use WSL on Windows")
+        raise UnsupportedPlatformError("wazuhdevenv supports Linux only; use WSL on Windows")
 
 
 def _write_privileged(
@@ -106,7 +106,7 @@ def _download(url: str) -> Path:
     os.close(fd)
     target = Path(name)
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "wazuh-devenv"})
+        request = urllib.request.Request(url, headers={"User-Agent": "wazuhdevenv"})
         with urllib.request.urlopen(request, timeout=30) as response:
             target.write_bytes(response.read())
         return target
@@ -248,7 +248,7 @@ class PackageManager:
             return
         raise ConfigurationError(
             f"existing Wazuh APT repository configuration is not managed by "
-            f"wazuh-devenv; refusing to overwrite: {path}"
+            f"wazuhdevenv; refusing to overwrite: {path}"
         )
 
     def _disable_apt_repository(self) -> None:
@@ -271,7 +271,7 @@ class PackageManager:
             return
         raise ConfigurationError(
             f"existing Wazuh RPM repository configuration is not managed by "
-            f"wazuh-devenv; refusing to overwrite: {path}"
+            f"wazuhdevenv; refusing to overwrite: {path}"
         )
 
     def _setup_apt_repository(self) -> None:
@@ -952,7 +952,7 @@ def initialize(
     if "workspace" in state:
         existing_workspace = state["workspace"]
         raise ConfigurationError(
-            "wazuh-devenv is already initialized; 'init' may only be run once. "
+            "wazuhdevenv is already initialized; 'init' may only be run once. "
             f"Workspace: {existing_workspace}; "
             f"Wazuh home: {state.get('wazuh_home', 'unknown')}; "
             f"Wazuh version: {state.get('wazuh_version', 'unknown')}; "

@@ -1,4 +1,4 @@
-"""Managed wazuh-devenv state and process locking."""
+"""Managed wazuhdevenv state and process locking."""
 
 from __future__ import annotations
 

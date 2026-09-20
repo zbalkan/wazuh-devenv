@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wazuh-devenv"
+name = "wazuhdevenv"
 version = "0.4.0.dev0"
 description = "Provision and operate a local Wazuh rule and decoder development environment"
 readme = "README.md"
@@ -41,9 +41,9 @@ dev = [
 wazuhdevenv = "wazuhdevenv.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/zbalkan/wazuh-devenv"
-Repository = "https://github.com/zbalkan/wazuh-devenv"
-Issues = "https://github.com/zbalkan/wazuh-devenv/issues"
+Homepage = "https://github.com/zbalkan/wazuhdevenv"
+Repository = "https://github.com/zbalkan/wazuhdevenv"
+Issues = "https://github.com/zbalkan/wazuhdevenv/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

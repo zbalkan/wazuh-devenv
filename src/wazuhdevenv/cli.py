@@ -1,4 +1,4 @@
-"""Command-line interface for wazuh-devenv."""
+"""Command-line interface for wazuhdevenv."""
 
 from __future__ import annotations
 

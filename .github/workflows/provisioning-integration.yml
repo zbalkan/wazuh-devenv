@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install wazuh-devenv
+      - name: Install wazuhdevenv
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
@@ -121,24 +121,24 @@ jobs:
 
           # RHEL-family pam_unix account checks can fail inside containers on
           # Ubuntu hosts even for valid local users. PAM itself is not under
-          # test here; sudoers authorization and wazuh-devenv's sudo boundary are.
+          # test here; sudoers authorization and wazuhdevenv's sudo boundary are.
           docker exec wazuh-rocky bash -c             'printf "%s\n" "#%PAM-1.0" "auth sufficient pam_permit.so" "account sufficient pam_permit.so" "session sufficient pam_permit.so" > /etc/pam.d/sudo'
 
-          docker exec wazuh-rocky cp -a /checkout /home/developer/wazuh-devenv
-          docker exec wazuh-rocky chown -R developer:developer /home/developer/wazuh-devenv
+          docker exec wazuh-rocky cp -a /checkout /home/developer/wazuhdevenv
+          docker exec wazuh-rocky chown -R developer:developer /home/developer/wazuhdevenv
           docker exec --user developer wazuh-rocky sudo -n true
 
-      - name: Install wazuh-devenv
+      - name: Install wazuhdevenv
         run: |
-          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuh-devenv             wazuh-rocky             python3 -m venv /home/developer/ci-venv
+          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuhdevenv             wazuh-rocky             python3 -m venv /home/developer/ci-venv
 
           docker exec             --user developer             --env HOME=/home/developer             wazuh-rocky             /home/developer/ci-venv/bin/python -m pip install --upgrade pip
 
-          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuh-devenv             wazuh-rocky             /home/developer/ci-venv/bin/python -m pip install -e .
+          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuhdevenv             wazuh-rocky             /home/developer/ci-venv/bin/python -m pip install -e .
 
       - name: First init
         run: |
-          docker exec             --user developer             --env HOME=/home/developer             --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state             --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"             --workdir /home/developer/wazuh-devenv             wazuh-rocky             /home/developer/ci-venv/bin/wazuhdevenv             init /home/developer/wazuh-workspace             --wazuh-version "$WAZUH_VERSION"             --skip-corpus
+          docker exec             --user developer             --env HOME=/home/developer             --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state             --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"             --workdir /home/developer/wazuhdevenv             wazuh-rocky             /home/developer/ci-venv/bin/wazuhdevenv             init /home/developer/wazuh-workspace             --wazuh-version "$WAZUH_VERSION"             --skip-corpus
 
       - name: Verify provisioned environment
         run: |
@@ -161,7 +161,7 @@ jobs:
         run: |
           set +e
           output="$(
-            docker exec               --user developer               --env HOME=/home/developer               --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state               --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"               --workdir /home/developer/wazuh-devenv               wazuh-rocky               /home/developer/ci-venv/bin/wazuhdevenv               init /home/developer/wazuh-workspace               --wazuh-version "$WAZUH_VERSION"               --skip-corpus 2>&1
+            docker exec               --user developer               --env HOME=/home/developer               --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state               --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"               --workdir /home/developer/wazuhdevenv               wazuh-rocky               /home/developer/ci-venv/bin/wazuhdevenv               init /home/developer/wazuh-workspace               --wazuh-version "$WAZUH_VERSION"               --skip-corpus 2>&1
           )"
           status=$?
           set -e
