@@ -235,7 +235,18 @@ The command is ownership-aware. It removes only state that can be attributed to
 `wazuhdevenv`, restores pre-existing Wazuh state where provenance is available,
 and refuses to overwrite Wazuh configuration that changed after initialization.
 
-For a normal environment created by current versions, uninstall:
+For a normal environment created by current versions, teardown follows a strict
+order when Wazuh Manager was installed by `wazuhdevenv`: stop Wazuh Manager,
+unmount the managed `rules` and `decoders` directories and verify that they
+are no longer mount points, remove the matching `/etc/fstab` entries, empty the underlying
+`/var/ossec/etc/rules` and `/var/ossec/etc/decoders` package directories
+while preserving the directories themselves, restore their expected
+`root:wazuh` ownership and `0770` mode (creating them only if missing),
+uninstall the `wazuh-manager` package, and finally remove managed
+`wazuhdevenv` state. The package is never removed while the workspace bind
+mounts are still active.
+
+Uninstall also:
 
 - unmounts the managed `rules` and `decoders` bind mounts;
 - removes only the exact matching entries added to `/etc/fstab`;
