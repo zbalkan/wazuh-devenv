@@ -30,7 +30,7 @@ def _parser() -> argparse.ArgumentParser:
 
     commands = parser.add_subparsers(dest="command", required=True)
 
-    init = commands.add_parser("init", help="Provision or reconcile a development workspace")
+    init = commands.add_parser("init", help="Provision a development workspace")
     init.add_argument("path", nargs="?", help="Workspace path (default: current directory)")
     init.add_argument("--wazuh-version", help="Install or require an exact Wazuh version")
     init.add_argument(
@@ -74,14 +74,18 @@ def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:
         raise WazuhDevenvError("workspace is not initialized; run 'wazuhdevenv init' first")
     python = Path(workspace_value) / ".venv/bin/python"
     if not python.is_file():
-        raise WazuhDevenvError(f"workspace virtual environment is missing: {python}")
+        raise WazuhDevenvError(
+            f"workspace virtual environment is missing: {python}; "
+            "restore it before running 'wazuhdevenv update'"
+        )
     runner = CommandRunner(user)
     code = "from importlib.metadata import version; print(version('wazuhtester'))"
     try:
         return runner.capture_as_user([str(python), "-c", code]).strip()
     except WazuhDevenvError as exc:
         raise WazuhDevenvError(
-            "wazuhtester is not installed in the workspace virtual environment; rerun 'wazuhdevenv init'"
+            "wazuhtester is not installed in the workspace virtual environment; "
+            "install it there, then run 'wazuhdevenv update'"
         ) from exc
 
 
@@ -91,7 +95,10 @@ def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
     runner = CommandRunner(user)
     actual = PackageManager(runner).installed_version()
     if not actual:
-        raise WazuhDevenvError("Wazuh Manager is not installed; run 'wazuhdevenv init' first")
+        raise WazuhDevenvError(
+            "Wazuh Manager is not installed; reinstall Wazuh Manager before "
+            "running 'wazuhdevenv update'"
+        )
     if recorded and recorded != actual:
         LOG.warning("Recorded Wazuh version %s differs from installed version %s", recorded, actual)
     return actual
