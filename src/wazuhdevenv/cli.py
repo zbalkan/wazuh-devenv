@@ -170,16 +170,11 @@ def _coverage_command(home: Path) -> int:
 
 def _uninstall_command(user: InvokingUser, home: Path) -> int:
     with managed_lock(home):
-        result = uninstall_environment(home, user)
+        workspace = uninstall_environment(home, user)
         LOG.info(
             "Uninstalled wazuhdevenv environment; preserved workspace: %s",
-            result.workspace,
+            workspace,
         )
-        if result.legacy_state:
-            LOG.warning(
-                "Legacy state was cleaned conservatively; Wazuh Manager and "
-                "the workspace virtual environment were preserved."
-            )
 
     shutil.rmtree(home)
     return 0
