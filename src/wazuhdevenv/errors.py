@@ -19,3 +19,7 @@ class ConfigurationError(WazuhDevenvError):
 
 class CorpusError(WazuhDevenvError):
     """Raised for corpus discovery, verification, or installation failures."""
+
+
+class CoverageError(WazuhDevenvError):
+    """Raised when workspace rule coverage cannot be determined reliably."""

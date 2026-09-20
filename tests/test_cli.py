@@ -251,3 +251,32 @@ def test_main_rejects_direct_root_invocation(
 
     assert cli.main(["update"]) == 1
     assert "run wazuhdevenv as the developer, not as root" in capsys.readouterr().err
+
+
+def test_coverage_command_uses_initialized_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    home = tmp_path / "managed"
+    home.mkdir()
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\\n",
+        encoding="utf-8",
+    )
+
+    sentinel = object()
+    monkeypatch.setattr(cli, "analyze_workspace", lambda path: sentinel if path == workspace else None)
+    monkeypatch.setattr(cli, "format_report", lambda result: "coverage report" if result is sentinel else "wrong")
+
+    assert cli._coverage_command(home) == 0
+    assert capsys.readouterr().out == "coverage report\\n"
+
+
+def test_coverage_command_requires_initialized_workspace(tmp_path: Path) -> None:
+    home = tmp_path / "managed"
+    home.mkdir()
+
+    with pytest.raises(cli.WazuhDevenvError, match="workspace is not initialized"):
+        cli._coverage_command(home)

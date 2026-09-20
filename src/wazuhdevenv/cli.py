@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .corpus import resolve_release, update_corpus
+from .coverage import analyze_workspace, format_report
 from .errors import ConfigurationError, CorpusError, WazuhDevenvError
 from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
@@ -41,6 +42,11 @@ def _parser() -> argparse.ArgumentParser:
 
     update = commands.add_parser("update", help="Install or refresh managed rule-test content")
     update.add_argument("--check", action="store_true", help="Resolve the compatible corpus without installing it")
+
+    commands.add_parser(
+        "coverage",
+        help="Report custom rule coverage from workspace tests",
+    )
 
     return parser
 
@@ -142,6 +148,19 @@ def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) ->
     return 0
 
 
+def _coverage_command(home: Path) -> int:
+    state = load_state(home)
+    workspace_value = state.get("workspace")
+    if not isinstance(workspace_value, str):
+        raise WazuhDevenvError(
+            "workspace is not initialized; run 'wazuhdevenv init' first"
+        )
+
+    result = analyze_workspace(Path(workspace_value))
+    print(format_report(result))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     logging_ready = False
@@ -162,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
             return _init_command(args, user, home)
         if args.command == "update":
             return _update_command(args, user, home)
+        if args.command == "coverage":
+            return _coverage_command(home)
     except (WazuhDevenvError, ValueError, OSError, RuntimeError) as exc:
         if logging_ready:
             LOG.error("%s", exc)
