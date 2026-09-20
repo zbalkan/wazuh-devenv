@@ -321,35 +321,35 @@ class PackageManager:
 
         LOG.info("Installing Wazuh Manager")
         if self.family == "apt":
-            self._setup_apt_repository()
             package = "wazuh-manager"
             if requested_version:
                 package += f"={requested_version}-1" if "-" not in requested_version else f"={requested_version}"
             try:
+                self._setup_apt_repository()
                 self._apt_install([package])
             except Exception:
                 try:
                     self._disable_apt_repository()
                 except Exception as cleanup_error:
                     LOG.error(
-                        "Could not disable the Wazuh APT repository after installation failed: %s",
+                        "Could not disable the Wazuh APT repository after setup or installation failed: %s",
                         cleanup_error,
                     )
                 raise
             self._disable_apt_repository()
         else:
-            self._setup_rpm_repository()
             package = "wazuh-manager"
             if requested_version:
                 package += f"-{requested_version}-1" if "-" not in requested_version else f"-{requested_version}"
             try:
+                self._setup_rpm_repository()
                 self.runner.run([self.command, "-y", "install", package], privileged=True)
             except Exception:
                 try:
                     self._set_rpm_repository_enabled(False)
                 except Exception as cleanup_error:
                     LOG.error(
-                        "Could not disable the Wazuh RPM repository after installation failed: %s",
+                        "Could not disable the Wazuh RPM repository after setup or installation failed: %s",
                         cleanup_error,
                     )
                 raise
