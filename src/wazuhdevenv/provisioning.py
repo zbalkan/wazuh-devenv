@@ -967,7 +967,7 @@ def initialize(
     _service_manager()
     prepare_workspace(workspace, user)
 
-    workspace_venv_created_by_tool = not (workspace / ".venv/pyvenv.cfg").is_file()
+    workspace_venv_created_by_tool = not (workspace / ".venv").exists()
     ensure_workspace_venv(runner, workspace)
 
     wazuh_installed_by_tool = package_manager.installed_version() is None
