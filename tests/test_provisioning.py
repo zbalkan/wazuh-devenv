@@ -605,7 +605,7 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     installed: list[list[str]] = []
     manager._apt_install = lambda packages: installed.append(packages)  # type: ignore[method-assign]
 
-    manager.ensure_system_dependencies()
+    assert manager.ensure_system_dependencies() == ["python3-venv"]
 
     assert installed == [["python3-venv"]]
 
@@ -798,7 +798,7 @@ def test_group_membership_already_present_skips_usermod() -> None:
     runner = GroupRunner()
     user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
 
-    provisioning.ensure_group_membership(runner, user)
+    assert provisioning.ensure_group_membership(runner, user) is False
 
     assert runner.commands == []
 
@@ -822,7 +822,7 @@ def test_group_membership_is_added_and_verified() -> None:
     runner = GroupRunner()
     user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
 
-    provisioning.ensure_group_membership(runner, user)
+    assert provisioning.ensure_group_membership(runner, user) is True
 
     assert runner.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
     assert runner.capture_calls == 2
@@ -941,6 +941,161 @@ def test_workspace_permissions_keep_invoking_user_as_owner(tmp_path: Path) -> No
         ] in runner.commands
 
 
+def test_pending_provisioning_retains_failed_init_ownership(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    state = {
+        "schema_version": 1,
+        "provisioning_pending": {
+            "workspace": str(workspace),
+            "package_manager_family": "apt",
+            "workspace_venv_created_by_tool": True,
+            "wazuh_installed_by_tool": True,
+            "group_membership_added": True,
+            "system_dependencies_installed": ["python3-venv"],
+            "repository_before": None,
+            "apt_keyring_preexisting": False,
+        },
+    }
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+
+    pending = provisioning._pending_provisioning(
+        state,
+        workspace,
+        manager,
+    )
+
+    assert pending["workspace_venv_created_by_tool"] is True
+    assert pending["wazuh_installed_by_tool"] is True
+    assert pending["group_membership_added"] is True
+    assert pending["system_dependencies_installed"] == ["python3-venv"]
+    assert pending["apt_keyring_preexisting"] is False
+
+
+def test_failed_init_retry_keeps_created_resource_ownership(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    workspace = tmp_path / "workspace"
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+    wazuh_installed = False
+    group_added = False
+    validation_attempts = 0
+
+    class FakePackageManager:
+        family = "apt"
+
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> list[str]:
+            return []
+
+        def installed_version(self) -> str | None:
+            return "4.14.8" if wazuh_installed else None
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            nonlocal wazuh_installed
+            del requested_version
+            wazuh_installed = True
+            return "4.14.8"
+
+    def ensure_venv(runner: object, path: Path) -> None:
+        del runner
+        (path / ".venv").mkdir(parents=True, exist_ok=True)
+
+    def ensure_group(runner: object, invoking_user: InvokingUser) -> bool:
+        nonlocal group_added
+        del runner, invoking_user
+        if group_added:
+            return False
+        group_added = True
+        return True
+
+    def validate(runner: object) -> None:
+        nonlocal validation_attempts
+        del runner
+        validation_attempts += 1
+        if validation_attempts == 1:
+            raise ConfigurationError("first attempt fails")
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", ensure_venv)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: False)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: False)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot())
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(provisioning, "ensure_group_membership", ensure_group)
+    monkeypatch.setattr(provisioning, "_read_optional_privileged", lambda *args: None)
+    monkeypatch.setattr(provisioning, "_privileged_exists", lambda *args: False)
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: False)
+    monkeypatch.setattr(provisioning, "configure_ossec", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_default_acls", lambda *args: None)
+    monkeypatch.setattr(provisioning, "validate_wazuh", validate)
+    monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
+    monkeypatch.setattr(provisioning, "_rollback_provisioning", lambda *args: None)
+
+    with pytest.raises(ConfigurationError, match="first attempt fails"):
+        provisioning.initialize(workspace, home, user)
+
+    pending_state = provisioning.load_state(home)
+    pending = pending_state["provisioning_pending"]
+    assert isinstance(pending, dict)
+    assert pending["workspace_venv_created_by_tool"] is True
+    assert pending["wazuh_installed_by_tool"] is True
+    assert pending["group_membership_added"] is True
+
+    assert provisioning.initialize(workspace, home, user) == "4.14.8"
+
+    final_state = provisioning.load_state(home)
+    assert "provisioning_pending" not in final_state
+    final = final_state["provisioning"]
+    assert isinstance(final, dict)
+    assert final["workspace_venv_created_by_tool"] is True
+    assert final["wazuh_installed_by_tool"] is True
+    assert final["group_membership_added"] is True
+
+
+def test_pending_provisioning_rejects_different_retry_workspace(
+    tmp_path: Path,
+) -> None:
+    state = {
+        "schema_version": 1,
+        "provisioning_pending": {
+            "workspace": str(tmp_path / "first"),
+            "package_manager_family": "apt",
+            "workspace_venv_created_by_tool": True,
+            "wazuh_installed_by_tool": False,
+            "group_membership_added": False,
+            "system_dependencies_installed": [],
+            "repository_before": None,
+            "apt_keyring_preexisting": None,
+        },
+    }
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+
+    with pytest.raises(ConfigurationError, match="different workspace"):
+        provisioning._pending_provisioning(
+            state,
+            tmp_path / "second",
+            manager,
+        )
+
+
 def test_initialize_rejects_second_init_before_provisioning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -987,11 +1142,16 @@ def test_initialize_checks_service_manager_before_install(
     user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
 
     class FakePackageManager:
+        family = "apt"
+
         def __init__(self, runner: object) -> None:
             del runner
 
         def ensure_system_dependencies(self) -> None:
             events.append("dependencies")
+
+        def installed_version(self) -> str:
+            return "4.14.8"
 
         def install_wazuh(self, requested_version: str | None) -> str:
             del requested_version
@@ -1038,11 +1198,16 @@ def test_group_membership_failure_does_not_enter_host_rollback(
     user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
 
     class FakePackageManager:
+        family = "apt"
+
         def __init__(self, runner: object) -> None:
             del runner
 
         def ensure_system_dependencies(self) -> None:
             pass
+
+        def installed_version(self) -> str:
+            return "4.14.8"
 
         def install_wazuh(self, requested_version: str | None) -> str:
             del requested_version
@@ -1072,6 +1237,7 @@ def test_group_membership_failure_does_not_enter_host_rollback(
         lambda *args: events.append("rollback"),
     )
     monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(provisioning, "save_state", lambda *args: None)
 
     with pytest.raises(ConfigurationError, match="group failure"):
         provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
@@ -1087,11 +1253,16 @@ def test_failed_host_configuration_uses_small_rollback_boundary(
     user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
 
     class FakePackageManager:
+        family = "apt"
+
         def __init__(self, runner: object) -> None:
             del runner
 
         def ensure_system_dependencies(self) -> None:
             pass
+
+        def installed_version(self) -> str:
+            return "4.14.8"
 
         def install_wazuh(self, requested_version: str | None) -> str:
             del requested_version
@@ -1126,6 +1297,8 @@ def test_failed_host_configuration_uses_small_rollback_boundary(
         "_rollback_provisioning",
         lambda *args: events.append("rollback"),
     )
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+    monkeypatch.setattr(provisioning, "save_state", lambda *args: None)
 
     with pytest.raises(ConfigurationError, match="invalid configuration"):
         provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
@@ -1244,11 +1417,16 @@ def test_initialize_rolls_back_when_state_persistence_fails(
     user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
 
     class FakePackageManager:
+        family = "apt"
+
         def __init__(self, runner: object) -> None:
             del runner
 
         def ensure_system_dependencies(self) -> None:
             pass
+
+        def installed_version(self) -> str:
+            return "4.14.8"
 
         def install_wazuh(self, requested_version: str | None) -> str:
             del requested_version
@@ -1277,11 +1455,12 @@ def test_initialize_rolls_back_when_state_persistence_fails(
     monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: None)
     monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
     monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)
-    monkeypatch.setattr(
-        provisioning,
-        "save_state",
-        lambda *args: (_ for _ in ()).throw(OSError("state write failed")),
-    )
+    def save_state(state_home: Path, state: dict[str, object]) -> None:
+        del state_home
+        if "workspace" in state and "provisioning" in state:
+            raise OSError("state write failed")
+
+    monkeypatch.setattr(provisioning, "save_state", save_state)
     monkeypatch.setattr(
         provisioning,
         "_rollback_provisioning",

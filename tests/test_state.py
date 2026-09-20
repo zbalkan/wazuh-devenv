@@ -4,7 +4,13 @@ from pathlib import Path
 import pytest
 
 from wazuhdevenv.errors import ConfigurationError
-from wazuhdevenv.state import ensure_managed_home, load_state, managed_lock, save_state
+from wazuhdevenv.state import (
+    ensure_managed_home,
+    load_state,
+    managed_lock,
+    managed_lock_path,
+    save_state,
+)
 
 
 def test_managed_home_rejects_symlink(tmp_path: Path) -> None:
@@ -38,20 +44,37 @@ def test_state_file_rejects_symlink(tmp_path: Path) -> None:
 
 
 def test_lock_file_rejects_symlink(tmp_path: Path) -> None:
+    home = tmp_path / "managed"
     target = tmp_path / "external.lock"
     target.touch()
-    (tmp_path / "wazuhdevenv.lock").symlink_to(target)
+    managed_lock_path(home).symlink_to(target)
 
     with pytest.raises(ConfigurationError, match="lock file must not be a symlink"):
-        with managed_lock(tmp_path):
+        with managed_lock(home):
             pass
 
 
 def test_managed_lock_prevents_second_writer(tmp_path: Path) -> None:
-    with managed_lock(tmp_path):
+    home = tmp_path / "managed"
+    with managed_lock(home):
         with pytest.raises(RuntimeError, match="another wazuhdevenv operation"):
-            with managed_lock(tmp_path):
+            with managed_lock(home):
                 pass
+
+
+def test_managed_lock_survives_managed_home_deletion(tmp_path: Path) -> None:
+    home = tmp_path / "managed"
+    home.mkdir()
+    lock_path = managed_lock_path(home)
+
+    with managed_lock(home):
+        home.rmdir()
+        assert lock_path.exists()
+        with pytest.raises(RuntimeError, match="another wazuhdevenv operation"):
+            with managed_lock(home):
+                pass
+
+    assert lock_path.exists()
 
 
 def test_state_round_trip(tmp_path: Path) -> None:
