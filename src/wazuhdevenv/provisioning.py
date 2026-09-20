@@ -25,6 +25,18 @@ OSSEC_CONF = WAZUH_HOME / "etc/ossec.conf"
 WINDOWS_RULES = WAZUH_HOME / "ruleset/rules/0575-win-base_rules.xml"
 LOGTEST_SOCKET = WAZUH_HOME / "queue/sockets/logtest"
 
+APT_REPOSITORY = (
+    "deb [signed-by=/usr/share/keyrings/wazuh.gpg] "
+    "https://packages.wazuh.com/4.x/apt/ stable main\n"
+)
+RPM_REPOSITORY = """[wazuh]
+gpgcheck=1
+gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
+enabled={enabled}
+name=EL-$releasever - Wazuh
+baseurl=https://packages.wazuh.com/4.x/yum/
+"""
+
 DISPOSABLE_WAZUH_SAMPLES = {
     ("rules", "local_rules.xml"),
     ("decoders", "local_decoder.xml"),
@@ -199,6 +211,44 @@ class PackageManager:
                 privileged=True,
             )
 
+    def _set_apt_repository_enabled(self, enabled: bool) -> None:
+        path = Path("/etc/apt/sources.list.d/wazuh.list")
+        target = APT_REPOSITORY if enabled else f"#{APT_REPOSITORY}"
+        alternate = f"#{APT_REPOSITORY}" if enabled else APT_REPOSITORY
+        if not _privileged_exists(self.runner, path):
+            if enabled:
+                _write_privileged(self.runner, path, target)
+            return
+        current = self.runner.capture(["cat", str(path)], privileged=True)
+        if current == target:
+            return
+        if current == alternate:
+            _rewrite_preserving_metadata(self.runner, path, target)
+            return
+        raise ConfigurationError(
+            f"existing Wazuh APT repository configuration is not managed by "
+            f"wazuh-devenv; refusing to overwrite: {path}"
+        )
+
+    def _set_rpm_repository_enabled(self, enabled: bool) -> None:
+        path = Path("/etc/yum.repos.d/wazuh.repo")
+        target = RPM_REPOSITORY.format(enabled=1 if enabled else 0)
+        alternate = RPM_REPOSITORY.format(enabled=0 if enabled else 1)
+        if not _privileged_exists(self.runner, path):
+            if enabled:
+                _write_privileged(self.runner, path, target)
+            return
+        current = self.runner.capture(["cat", str(path)], privileged=True)
+        if current == target:
+            return
+        if current == alternate:
+            _rewrite_preserving_metadata(self.runner, path, target)
+            return
+        raise ConfigurationError(
+            f"existing Wazuh RPM repository configuration is not managed by "
+            f"wazuh-devenv; refusing to overwrite: {path}"
+        )
+
     def _setup_apt_repository(self) -> None:
         self._apt_install(["gnupg", "apt-transport-https"])
         keyring = Path("/usr/share/keyrings/wazuh.gpg")
@@ -219,11 +269,7 @@ class PackageManager:
         finally:
             key.unlink(missing_ok=True)
 
-        _write_privileged(
-            self.runner,
-            Path("/etc/apt/sources.list.d/wazuh.list"),
-            "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main\n",
-        )
+        self._set_apt_repository_enabled(True)
 
     def _setup_rpm_repository(self) -> None:
         key = _download("https://packages.wazuh.com/key/GPG-KEY-WAZUH")
@@ -232,14 +278,7 @@ class PackageManager:
         finally:
             key.unlink(missing_ok=True)
 
-        repo = """[wazuh]
-gpgcheck=1
-gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
-enabled=1
-name=EL-$releasever - Wazuh
-baseurl=https://packages.wazuh.com/4.x/yum/
-"""
-        _write_privileged(self.runner, Path("/etc/yum.repos.d/wazuh.repo"), repo)
+        self._set_rpm_repository_enabled(True)
 
     def install_wazuh(self, requested_version: str | None) -> str:
         current = self.installed_version()
@@ -262,11 +301,7 @@ baseurl=https://packages.wazuh.com/4.x/yum/
             if requested_version:
                 package += f"={requested_version}-1" if "-" not in requested_version else f"={requested_version}"
             self._apt_install([package])
-            _write_privileged(
-                self.runner,
-                Path("/etc/apt/sources.list.d/wazuh.list"),
-                "#deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main\n",
-            )
+            self._set_apt_repository_enabled(False)
             self.runner.run(["apt-get", "update"], privileged=True)
         else:
             self._setup_rpm_repository()
@@ -274,10 +309,7 @@ baseurl=https://packages.wazuh.com/4.x/yum/
             if requested_version:
                 package += f"-{requested_version}-1" if "-" not in requested_version else f"-{requested_version}"
             self.runner.run([self.command, "-y", "install", package], privileged=True)
-            repo_path = Path("/etc/yum.repos.d/wazuh.repo")
-            repo = self.runner.capture(["cat", str(repo_path)], privileged=True)
-            repo = re.sub(r"(?m)^enabled=1$", "enabled=0", repo)
-            _write_privileged(self.runner, repo_path, repo)
+            self._set_rpm_repository_enabled(False)
 
         installed = self.installed_version()
         if not installed:

@@ -272,6 +272,81 @@ def test_configure_bind_mounts_checks_wazuh_directories_before_mounting(
     ]
 
 
+@pytest.mark.parametrize(
+    ("family", "path", "enabled_text", "disabled_text"),
+    [
+        (
+            "apt",
+            Path("/etc/apt/sources.list.d/wazuh.list"),
+            provisioning.APT_REPOSITORY,
+            f"#{provisioning.APT_REPOSITORY}",
+        ),
+        (
+            "rpm",
+            Path("/etc/yum.repos.d/wazuh.repo"),
+            provisioning.RPM_REPOSITORY.format(enabled=1),
+            provisioning.RPM_REPOSITORY.format(enabled=0),
+        ),
+    ],
+)
+def test_repository_toggle_only_rewrites_managed_content(
+    monkeypatch: pytest.MonkeyPatch,
+    family: str,
+    path: Path,
+    enabled_text: str,
+    disabled_text: str,
+) -> None:
+    class RepoRunner:
+        def __init__(self) -> None:
+            self.content = disabled_text
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            assert args == ["cat", str(path)]
+            assert privileged is True
+            return self.content
+
+    runner = RepoRunner()
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    rewritten: list[str] = []
+
+    monkeypatch.setattr(provisioning, "_privileged_exists", lambda *args: True)
+    monkeypatch.setattr(
+        provisioning,
+        "_rewrite_preserving_metadata",
+        lambda runner, target, content: rewritten.append(content),
+    )
+
+    if family == "apt":
+        manager._set_apt_repository_enabled(True)
+    else:
+        manager._set_rpm_repository_enabled(True)
+
+    assert rewritten == [enabled_text]
+
+
+@pytest.mark.parametrize("family", ["apt", "rpm"])
+def test_repository_setup_refuses_to_overwrite_custom_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    family: str,
+) -> None:
+    class RepoRunner:
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            del args
+            assert privileged is True
+            return "custom repository configuration\n"
+
+    manager = object.__new__(PackageManager)
+    manager.runner = RepoRunner()
+    monkeypatch.setattr(provisioning, "_privileged_exists", lambda *args: True)
+
+    with pytest.raises(ConfigurationError, match="refusing to overwrite"):
+        if family == "apt":
+            manager._set_apt_repository_enabled(True)
+        else:
+            manager._set_rpm_repository_enabled(True)
+
+
 def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
     manager = _apt_manager(
         DpkgRunner(
