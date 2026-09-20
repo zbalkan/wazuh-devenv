@@ -1026,15 +1026,12 @@ def initialize(
                 "wazuh_installed_by_tool": wazuh_installed_by_tool,
                 "workspace_venv_created_by_tool": workspace_venv_created_by_tool,
                 "group_membership_added": group_membership_added,
-                "service_was_active": snapshot.service_was_active,
-                "service_was_enabled": snapshot.service_was_enabled,
                 "preexisting_mounts": sorted(
                     str(path) for path in snapshot.preexisting_mounts
                 ),
                 "preexisting_fstab_entries": preexisting_fstab_entries,
                 "ossec_backup_preexisting": ossec_backup_preexisting,
                 "windows_backup_preexisting": windows_backup_preexisting,
-                "package_manager_family": package_manager.family,
                 "repository_before": repository_before,
                 "apt_keyring_preexisting": apt_keyring_preexisting,
             },
