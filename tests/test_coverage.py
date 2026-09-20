@@ -111,6 +111,28 @@ def test_rules(log, rule_id):
     assert count == 1
 
 
+def test_non_equality_rule_id_comparisons_do_not_count_as_coverage(
+    tmp_path: Path,
+) -> None:
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_comparisons.py").write_text(
+        """
+def test_comparisons(response):
+    assert response.rule_id != "400001"
+    assert response.rule_id < "400002"
+    assert "400003" > response.rule_id
+    assert "400004" == response.rule_id != "400005"
+""",
+        encoding="utf-8",
+    )
+
+    referenced, count = collect_test_references(tests)
+
+    assert referenced == {"400004"}
+    assert count == 1
+
+
 def test_unrelated_literals_are_not_counted_as_rule_ids(tmp_path: Path) -> None:
     tests = tmp_path / "tests"
     tests.mkdir()
