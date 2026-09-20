@@ -251,6 +251,10 @@ class PackageManager:
             f"wazuh-devenv; refusing to overwrite: {path}"
         )
 
+    def _disable_apt_repository(self) -> None:
+        self._set_apt_repository_enabled(False)
+        self.runner.run(["apt-get", "update"], privileged=True)
+
     def _set_rpm_repository_enabled(self, enabled: bool) -> None:
         path = Path("/etc/yum.repos.d/wazuh.repo")
         target = RPM_REPOSITORY.format(enabled=1 if enabled else 0)
@@ -325,15 +329,14 @@ class PackageManager:
                 self._apt_install([package])
             except Exception:
                 try:
-                    self._set_apt_repository_enabled(False)
+                    self._disable_apt_repository()
                 except Exception as cleanup_error:
                     LOG.error(
                         "Could not disable the Wazuh APT repository after installation failed: %s",
                         cleanup_error,
                     )
                 raise
-            self._set_apt_repository_enabled(False)
-            self.runner.run(["apt-get", "update"], privileged=True)
+            self._disable_apt_repository()
         else:
             self._setup_rpm_repository()
             package = "wazuh-manager"
