@@ -262,7 +262,7 @@ def test_coverage_command_uses_initialized_workspace(
     home = tmp_path / "managed"
     home.mkdir()
     (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\\n",
+        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
         encoding="utf-8",
     )
 
@@ -271,7 +271,7 @@ def test_coverage_command_uses_initialized_workspace(
     monkeypatch.setattr(cli, "format_report", lambda result: "coverage report" if result is sentinel else "wrong")
 
     assert cli._coverage_command(home) == 0
-    assert capsys.readouterr().out == "coverage report\\n"
+    assert capsys.readouterr().out == "coverage report\n"
 
 
 def test_coverage_command_requires_initialized_workspace(tmp_path: Path) -> None:
