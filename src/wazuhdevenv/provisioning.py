@@ -121,7 +121,7 @@ class ProvisioningSnapshot:
     service_was_enabled: bool | None
     ossec_conf: str
     windows_rules: str
-    fstab: str
+    fstab: str | None
     preexisting_mounts: frozenset[Path]
 
 
@@ -206,7 +206,7 @@ class PackageManager:
             if self.runner.run(["rpm", "-q", package], check=False).returncode != 0
         ]
 
-        coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "stat", "test")
+        coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "rm", "stat", "test")
         if any(shutil.which(command) is None for command in coreutils_commands):
             missing.append("coreutils")
         if missing:
@@ -530,8 +530,16 @@ def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
     return source_id == target_id
 
 
+def _read_optional_privileged(runner: CommandRunner, path: Path) -> str | None:
+    if not _privileged_exists(runner, path):
+        return None
+    return runner.capture(["cat", str(path)], privileged=True)
+
+
 def _fstab_has_entry(runner: CommandRunner, source: Path, target: Path) -> bool:
-    text = runner.capture(["cat", "/etc/fstab"], privileged=True)
+    text = _read_optional_privileged(runner, Path("/etc/fstab"))
+    if text is None:
+        return False
     expected = f"{source} {target} none bind 0 0"
     for raw in text.splitlines():
         line = raw.strip()
@@ -549,12 +557,15 @@ def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
     if _fstab_has_entry(runner, source, target):
         return
     fstab_path = Path("/etc/fstab")
-    text = runner.capture(["cat", str(fstab_path)], privileged=True)
-    updated = text
+    text = _read_optional_privileged(runner, fstab_path)
+    updated = text or ""
     if updated and not updated.endswith("\n"):
         updated += "\n"
     updated += f"{source} {target} none bind 0 0\n"
-    _rewrite_preserving_metadata(runner, fstab_path, updated)
+    if text is None:
+        _write_privileged(runner, fstab_path, updated)
+    else:
+        _rewrite_preserving_metadata(runner, fstab_path, updated)
 
 
 def preflight_bind_mounts(
@@ -815,7 +826,7 @@ def _capture_snapshot(
         service_was_enabled=service_was_enabled,
         ossec_conf=runner.capture(["cat", str(OSSEC_CONF)], privileged=True),
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
-        fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
+        fstab=_read_optional_privileged(runner, Path("/etc/fstab")),
         preexisting_mounts=frozenset(preexisting_mounts),
     )
 
@@ -848,8 +859,17 @@ def _rollback_provisioning(
         except Exception as exc:
             recovery_errors.append(f"unmount {target}: {exc}")
 
+    fstab_path = Path("/etc/fstab")
+    try:
+        if snapshot.fstab is None:
+            if _privileged_exists(runner, fstab_path):
+                runner.run(["rm", "-f", str(fstab_path)], privileged=True)
+        else:
+            _restore_text_if_changed(runner, fstab_path, snapshot.fstab)
+    except Exception as exc:
+        recovery_errors.append(f"restore {fstab_path}: {exc}")
+
     for path, original in (
-        (Path("/etc/fstab"), snapshot.fstab),
         (OSSEC_CONF, snapshot.ossec_conf),
         (WINDOWS_RULES, snapshot.windows_rules),
     ):
