@@ -101,7 +101,7 @@ jobs:
 
       - name: Start Rocky Linux systemd container
         run: |
-          docker run --detach             --name wazuh-rocky             --privileged             --cgroupns=host             --env container=docker             --tmpfs /run             --tmpfs /run/lock             --volume /sys/fs/cgroup:/sys/fs/cgroup:rw             --volume "$GITHUB_WORKSPACE:/checkout:ro"             rockylinux:10             /sbin/init
+          docker run --detach             --name wazuh-rocky             --privileged             --cgroupns=host             --env container=docker             --tmpfs /run             --tmpfs /run/lock             --volume /sys/fs/cgroup:/sys/fs/cgroup:rw             --volume "$GITHUB_WORKSPACE:/checkout:ro"             rockylinux/rockylinux:10-ubi-init             /sbin/init
 
           for _ in {1..30}; do
             state="$(docker exec wazuh-rocky systemctl is-system-running 2>/dev/null || true)"
