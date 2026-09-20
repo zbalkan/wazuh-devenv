@@ -51,6 +51,7 @@ jobs:
           test "$(stat -c %G "$WORKSPACE/rules")" = "wazuh"
           test "$(stat -c %U "$WORKSPACE/decoders")" = "$USER"
           test "$(stat -c %G "$WORKSPACE/decoders")" = "wazuh"
+          id -nG "$USER" | tr ' ' '\n' | grep -Fxq wazuh
           test -f "$WAZUHDEVENV_HOME/state.json"
           sudo mountpoint -q /var/ossec/etc/rules
           sudo mountpoint -q /var/ossec/etc/decoders
