@@ -82,6 +82,25 @@ jobs:
           sudo mountpoint -q /var/ossec/etc/rules
           sudo mountpoint -q /var/ossec/etc/decoders
 
+      - name: Uninstall environment
+        run: |
+          printf '%s\n' '<group name="preserved"></group>' > "$WORKSPACE/rules/preserved.xml"
+          wazuhdevenv uninstall
+
+      - name: Verify uninstall cleanup
+        run: |
+          ! dpkg-query -W -f='${Status}\n' wazuh-manager 2>/dev/null | grep -Fq 'install ok installed'
+          test ! -e /var/ossec
+          test ! -e "$WAZUHDEVENV_HOME"
+          test ! -e "$WORKSPACE/.venv"
+          test -f "$WORKSPACE/rules/preserved.xml"
+          test -d "$WORKSPACE/decoders"
+          ! grep -Fq "$WORKSPACE/rules /var/ossec/etc/rules none bind 0 0" /etc/fstab
+          ! grep -Fq "$WORKSPACE/decoders /var/ossec/etc/decoders none bind 0 0" /etc/fstab
+          test ! -e /etc/apt/sources.list.d/wazuh.list
+          test ! -e /usr/share/keyrings/wazuh.gpg
+          ! id -nG "$USER" | tr ' ' '\n' | grep -Fxq wazuh
+
       - name: Diagnostics on failure
         if: failure()
         run: |
@@ -177,6 +196,24 @@ jobs:
           docker exec wazuh-rocky test -S /var/ossec/queue/sockets/logtest
           docker exec wazuh-rocky mountpoint -q /var/ossec/etc/rules
           docker exec wazuh-rocky mountpoint -q /var/ossec/etc/decoders
+
+      - name: Uninstall environment
+        run: |
+          docker exec wazuh-rocky bash -c 'printf "%s\n" "<group name=\"preserved\"></group>" > /home/developer/wazuh-workspace/rules/preserved.xml'
+          docker exec             --user developer             --env HOME=/home/developer             --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state             --workdir /home/developer/wazuhdevenv             wazuh-rocky             /home/developer/ci-venv/bin/wazuhdevenv uninstall
+
+      - name: Verify uninstall cleanup
+        run: |
+          ! docker exec wazuh-rocky rpm -q wazuh-manager
+          docker exec wazuh-rocky test ! -e /var/ossec
+          docker exec wazuh-rocky test ! -e /home/developer/wazuhdevenv-state
+          docker exec wazuh-rocky test ! -e /home/developer/wazuh-workspace/.venv
+          docker exec wazuh-rocky test -f /home/developer/wazuh-workspace/rules/preserved.xml
+          docker exec wazuh-rocky test -d /home/developer/wazuh-workspace/decoders
+          ! docker exec wazuh-rocky grep -Fq '/home/developer/wazuh-workspace/rules /var/ossec/etc/rules none bind 0 0' /etc/fstab
+          ! docker exec wazuh-rocky grep -Fq '/home/developer/wazuh-workspace/decoders /var/ossec/etc/decoders none bind 0 0' /etc/fstab
+          docker exec wazuh-rocky test ! -e /etc/yum.repos.d/wazuh.repo
+          ! docker exec wazuh-rocky id -nG developer | tr ' ' '\n' | grep -Fxq wazuh
 
       - name: Diagnostics on failure
         if: failure()
