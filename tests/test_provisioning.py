@@ -353,6 +353,53 @@ def test_repository_setup_refuses_to_overwrite_custom_configuration(
             manager._set_rpm_repository_enabled(True)
 
 
+def test_failed_apt_repository_setup_attempts_cleanup() -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    events: list[str] = []
+
+    def fail_setup() -> None:
+        events.append("setup")
+        raise RuntimeError("setup failed")
+
+    manager._setup_apt_repository = fail_setup  # type: ignore[method-assign]
+    manager._disable_apt_repository = lambda: events.append("cleanup")  # type: ignore[method-assign]
+    manager._apt_install = (  # type: ignore[method-assign]
+        lambda packages: (_ for _ in ()).throw(AssertionError(f"install must not run: {packages}"))
+    )
+
+    with pytest.raises(RuntimeError, match="setup failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == ["setup", "cleanup"]
+
+
+def test_failed_rpm_repository_setup_attempts_cleanup() -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "rpm"
+    manager.command = "dnf"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    events: list[object] = []
+
+    def fail_setup() -> None:
+        events.append("setup")
+        raise RuntimeError("setup failed")
+
+    manager._setup_rpm_repository = fail_setup  # type: ignore[method-assign]
+    manager._set_rpm_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="setup failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == ["setup", ("repository", False)]
+
+
 def test_failed_apt_wazuh_install_disables_repository() -> None:
     events: list[object] = []
 
