@@ -62,7 +62,7 @@ WINDOWS_RULE_EXPECTED = """  <rule id="60000" level="0">
 
 def ensure_linux() -> None:
     if sys.platform != "linux":
-        raise UnsupportedPlatformError("wazuh-devenv supports Linux only; use WSL on Windows")
+        raise UnsupportedPlatformError("wazuhdevenv supports Linux only; use WSL on Windows")
 
 
 def _write_privileged(
@@ -106,7 +106,7 @@ def _download(url: str) -> Path:
     os.close(fd)
     target = Path(name)
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "wazuh-devenv"})
+        request = urllib.request.Request(url, headers={"User-Agent": "wazuhdevenv"})
         with urllib.request.urlopen(request, timeout=30) as response:
             target.write_bytes(response.read())
         return target
@@ -121,30 +121,38 @@ class ProvisioningSnapshot:
     service_was_enabled: bool | None
     ossec_conf: str
     windows_rules: str
-    fstab: str
+    fstab: str | None
     preexisting_mounts: frozenset[Path]
 
 
 class PackageManager:
     def __init__(self, runner: CommandRunner) -> None:
         self.runner = runner
-        if shutil.which("apt-get"):
+        if runner.trusted_which("apt-get"):
             self.family = "apt"
             self.command = "apt-get"
-        elif shutil.which("dnf"):
+        elif runner.trusted_which("dnf"):
             self.family = "rpm"
             self.command = "dnf"
-        elif shutil.which("yum"):
+        elif runner.trusted_which("yum"):
             self.family = "rpm"
             self.command = "yum"
         else:
             raise UnsupportedPlatformError("supported package manager not found (APT, DNF, or YUM)")
 
+    def _trusted_query(self, executable: str) -> str:
+        resolved = self.runner.trusted_which(executable)
+        if not resolved:
+            raise UnsupportedPlatformError(
+                f"required package query command not found: {executable}"
+            )
+        return resolved
+
     def _apt_package_version(self, package: str) -> str | None:
         try:
             raw = self.runner.capture(
                 [
-                    "dpkg-query",
+                    self._trusted_query("dpkg-query"),
                     "-W",
                     "-f=${Status}\t${Version}\n",
                     package,
@@ -167,7 +175,13 @@ class PackageManager:
         else:
             try:
                 raw = self.runner.capture(
-                    ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "wazuh-manager"]
+                    [
+                        self._trusted_query("rpm"),
+                        "-q",
+                        "--qf",
+                        "%{VERSION}-%{RELEASE}",
+                        "wazuh-manager",
+                    ]
                 )
             except CommandError:
                 return None
@@ -199,12 +213,19 @@ class PackageManager:
                 self._apt_install(missing)
             return
 
-        packages = ["python3", "util-linux", "coreutils", "findutils", "gnupg2"]
+        packages = ["python3", "util-linux", "findutils", "gnupg2"]
         missing = [
             package
             for package in packages
-            if self.runner.run(["rpm", "-q", package], check=False).returncode != 0
+            if self.runner.run(
+                [self._trusted_query("rpm"), "-q", package],
+                check=False,
+            ).returncode != 0
         ]
+
+        coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "rm", "stat", "test")
+        if any(self.runner.trusted_which(command) is None for command in coreutils_commands):
+            missing.append("coreutils")
         if missing:
             self.runner.run(
                 [self.command, "-y", "install", *missing],
@@ -227,8 +248,12 @@ class PackageManager:
             return
         raise ConfigurationError(
             f"existing Wazuh APT repository configuration is not managed by "
-            f"wazuh-devenv; refusing to overwrite: {path}"
+            f"wazuhdevenv; refusing to overwrite: {path}"
         )
+
+    def _disable_apt_repository(self) -> None:
+        self._set_apt_repository_enabled(False)
+        self.runner.run(["apt-get", "update"], privileged=True)
 
     def _set_rpm_repository_enabled(self, enabled: bool) -> None:
         path = Path("/etc/yum.repos.d/wazuh.repo")
@@ -246,7 +271,7 @@ class PackageManager:
             return
         raise ConfigurationError(
             f"existing Wazuh RPM repository configuration is not managed by "
-            f"wazuh-devenv; refusing to overwrite: {path}"
+            f"wazuhdevenv; refusing to overwrite: {path}"
         )
 
     def _setup_apt_repository(self) -> None:
@@ -296,19 +321,38 @@ class PackageManager:
 
         LOG.info("Installing Wazuh Manager")
         if self.family == "apt":
-            self._setup_apt_repository()
             package = "wazuh-manager"
             if requested_version:
                 package += f"={requested_version}-1" if "-" not in requested_version else f"={requested_version}"
-            self._apt_install([package])
-            self._set_apt_repository_enabled(False)
-            self.runner.run(["apt-get", "update"], privileged=True)
+            try:
+                self._setup_apt_repository()
+                self._apt_install([package])
+            except Exception:
+                try:
+                    self._disable_apt_repository()
+                except Exception as cleanup_error:
+                    LOG.error(
+                        "Could not disable the Wazuh APT repository after setup or installation failed: %s",
+                        cleanup_error,
+                    )
+                raise
+            self._disable_apt_repository()
         else:
-            self._setup_rpm_repository()
             package = "wazuh-manager"
             if requested_version:
                 package += f"-{requested_version}-1" if "-" not in requested_version else f"-{requested_version}"
-            self.runner.run([self.command, "-y", "install", package], privileged=True)
+            try:
+                self._setup_rpm_repository()
+                self.runner.run([self.command, "-y", "install", package], privileged=True)
+            except Exception:
+                try:
+                    self._set_rpm_repository_enabled(False)
+                except Exception as cleanup_error:
+                    LOG.error(
+                        "Could not disable the Wazuh RPM repository after setup or installation failed: %s",
+                        cleanup_error,
+                    )
+                raise
             self._set_rpm_repository_enabled(False)
 
         installed = self.installed_version()
@@ -526,8 +570,16 @@ def _same_bind_mount(runner: CommandRunner, source: Path, target: Path) -> bool:
     return source_id == target_id
 
 
+def _read_optional_privileged(runner: CommandRunner, path: Path) -> str | None:
+    if not _privileged_exists(runner, path):
+        return None
+    return runner.capture(["cat", str(path)], privileged=True)
+
+
 def _fstab_has_entry(runner: CommandRunner, source: Path, target: Path) -> bool:
-    text = runner.capture(["cat", "/etc/fstab"], privileged=True)
+    text = _read_optional_privileged(runner, Path("/etc/fstab"))
+    if text is None:
+        return False
     expected = f"{source} {target} none bind 0 0"
     for raw in text.splitlines():
         line = raw.strip()
@@ -545,12 +597,15 @@ def _ensure_fstab(runner: CommandRunner, source: Path, target: Path) -> None:
     if _fstab_has_entry(runner, source, target):
         return
     fstab_path = Path("/etc/fstab")
-    text = runner.capture(["cat", str(fstab_path)], privileged=True)
-    updated = text
+    text = _read_optional_privileged(runner, fstab_path)
+    updated = text or ""
     if updated and not updated.endswith("\n"):
         updated += "\n"
     updated += f"{source} {target} none bind 0 0\n"
-    _rewrite_preserving_metadata(runner, fstab_path, updated)
+    if text is None:
+        _write_privileged(runner, fstab_path, updated)
+    else:
+        _rewrite_preserving_metadata(runner, fstab_path, updated)
 
 
 def preflight_bind_mounts(
@@ -670,9 +725,9 @@ def configure_permissions(
 
 
 def _service_manager() -> str:
-    if shutil.which("systemctl") and Path("/run/systemd/system").exists():
+    if CommandRunner.trusted_which("systemctl") and Path("/run/systemd/system").exists():
         return "systemd"
-    if shutil.which("service"):
+    if CommandRunner.trusted_which("service"):
         return "sysv"
     raise UnsupportedPlatformError("supported service manager not found (systemd or service)")
 
@@ -811,7 +866,7 @@ def _capture_snapshot(
         service_was_enabled=service_was_enabled,
         ossec_conf=runner.capture(["cat", str(OSSEC_CONF)], privileged=True),
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
-        fstab=runner.capture(["cat", "/etc/fstab"], privileged=True),
+        fstab=_read_optional_privileged(runner, Path("/etc/fstab")),
         preexisting_mounts=frozenset(preexisting_mounts),
     )
 
@@ -844,8 +899,17 @@ def _rollback_provisioning(
         except Exception as exc:
             recovery_errors.append(f"unmount {target}: {exc}")
 
+    fstab_path = Path("/etc/fstab")
+    try:
+        if snapshot.fstab is None:
+            if _privileged_exists(runner, fstab_path):
+                runner.run(["rm", "-f", str(fstab_path)], privileged=True)
+        else:
+            _restore_text_if_changed(runner, fstab_path, snapshot.fstab)
+    except Exception as exc:
+        recovery_errors.append(f"restore {fstab_path}: {exc}")
+
     for path, original in (
-        (Path("/etc/fstab"), snapshot.fstab),
         (OSSEC_CONF, snapshot.ossec_conf),
         (WINDOWS_RULES, snapshot.windows_rules),
     ):
@@ -888,7 +952,7 @@ def initialize(
     if "workspace" in state:
         existing_workspace = state["workspace"]
         raise ConfigurationError(
-            "wazuh-devenv is already initialized; 'init' may only be run once. "
+            "wazuhdevenv is already initialized; 'init' may only be run once. "
             f"Workspace: {existing_workspace}; "
             f"Wazuh home: {state.get('wazuh_home', 'unknown')}; "
             f"Wazuh version: {state.get('wazuh_version', 'unknown')}; "

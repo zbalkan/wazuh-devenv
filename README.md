@@ -1,6 +1,6 @@
-# wazuh-devenv
+# wazuhdevenv
 
-`wazuh-devenv` provisions and maintains a local Wazuh rule and decoder development environment.
+`wazuhdevenv` provisions and maintains a local Wazuh rule and decoder development environment.
 
 The installable Python CLI owns environment preparation; default Wazuh regression content is distributed independently by [wazuh-rule-tests](https://github.com/zbalkan/wazuh-rule-tests), and logtest communication is provided by [wazuhtester](https://github.com/zbalkan/wazuhtester).
 
@@ -14,21 +14,21 @@ The tooling is deliberately separated by responsibility:
 | `wazuh-rule-tests` | versioned pytest regression corpus for built-in Wazuh rules |
 | `wazuhcoverage` | runtime Wazuh JSON archive coverage analysis |
 | `wazuh-testgen` | generation of pytest rule-test content |
-| `wazuh-devenv` | environment installation, configuration, managed content, and orchestration |
+| `wazuhdevenv` | environment installation, configuration, managed content, and orchestration |
 
 ## Installation
 
-For CLI use, install `wazuh-devenv` with an isolated application installer.
+For CLI use, install `wazuhdevenv` with an isolated application installer.
 Before the first PyPI release, install the current `main` branch directly:
 
 ```bash
-pipx install "git+https://github.com/zbalkan/wazuh-devenv.git@main"
+pipx install "git+https://github.com/zbalkan/wazuhdevenv.git@main"
 ```
 
 After the package is published to PyPI, the stable installation command will be:
 
 ```bash
-pipx install wazuh-devenv
+pipx install wazuhdevenv
 ```
 
 A development checkout can be installed with:
@@ -103,7 +103,7 @@ wazuhdevenv init --skip-corpus
 ```
 
 Wazuh installs sample `local_rules.xml` and `local_decoder.xml` files. In a
-workspace provisioned by `wazuh-devenv`, these samples are not treated as user
+workspace provisioned by `wazuhdevenv`, these samples are not treated as user
 content and are never copied into the project. Users can add their own rule or
 decoder files later, including files with those names if they choose.
 
@@ -123,7 +123,7 @@ The workspace virtual environment belongs to the project. It is deliberately sep
 
 ## Run rule and decoder tests
 
-`wazuh-devenv` prepares the environment and managed test content. It does not provide a separate test runner; use pytest from the workspace virtual environment.
+`wazuhdevenv` prepares the environment and managed test content. It does not provide a separate test runner; use pytest from the workspace virtual environment.
 
 Run your workspace tests:
 
@@ -148,11 +148,11 @@ Run both together:
   --wazuh-require-logtest
 ```
 
-These are ordinary pytest suites, so normal pytest selection, markers, fail-fast options, IDE integration, and plugins remain available without a `wazuh-devenv` wrapper.
+These are ordinary pytest suites, so normal pytest selection, markers, fail-fast options, IDE integration, and plugins remain available without a `wazuhdevenv` wrapper.
 
 ## Report custom rule test coverage
 
-`wazuh-devenv coverage` reports how many custom rule IDs defined under the initialized workspace's `rules/` directory are explicitly referenced by tests under `tests/`.
+`wazuhdevenv coverage` reports how many custom rule IDs defined under the initialized workspace's `rules/` directory are explicitly referenced by tests under `tests/`.
 
 ```bash
 wazuhdevenv coverage

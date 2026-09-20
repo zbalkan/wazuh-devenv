@@ -10,6 +10,7 @@ import wazuhdevenv.provisioning as provisioning
 from wazuhdevenv.errors import ConfigurationError
 from wazuhdevenv.paths import InvokingUser
 from wazuhdevenv.provisioning import PackageManager, ProvisioningSnapshot
+from wazuhdevenv.runner import CommandRunner
 
 
 class RecordingRunner:
@@ -41,9 +42,14 @@ class DpkgRunner:
     def __init__(self, states: dict[str, str]) -> None:
         self.states = states
 
+    def trusted_which(self, command: str) -> str | None:
+        if command == "dpkg-query":
+            return "/usr/bin/dpkg-query"
+        return None
+
     def capture(self, args: list[str], *, privileged: bool = False) -> str:
         del privileged
-        if args[:2] != ["dpkg-query", "-W"]:
+        if args[:2] != ["/usr/bin/dpkg-query", "-W"]:
             raise AssertionError(f"unexpected command: {args}")
         package = args[-1]
         value = self.states.get(package)
@@ -347,6 +353,197 @@ def test_repository_setup_refuses_to_overwrite_custom_configuration(
             manager._set_rpm_repository_enabled(True)
 
 
+def test_failed_apt_repository_setup_attempts_cleanup() -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    events: list[str] = []
+
+    def fail_setup() -> None:
+        events.append("setup")
+        raise RuntimeError("setup failed")
+
+    manager._setup_apt_repository = fail_setup  # type: ignore[method-assign]
+    manager._disable_apt_repository = lambda: events.append("cleanup")  # type: ignore[method-assign]
+    manager._apt_install = (  # type: ignore[method-assign]
+        lambda packages: (_ for _ in ()).throw(AssertionError(f"install must not run: {packages}"))
+    )
+
+    with pytest.raises(RuntimeError, match="setup failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == ["setup", "cleanup"]
+
+
+def test_failed_rpm_repository_setup_attempts_cleanup() -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "rpm"
+    manager.command = "dnf"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    events: list[object] = []
+
+    def fail_setup() -> None:
+        events.append("setup")
+        raise RuntimeError("setup failed")
+
+    manager._setup_rpm_repository = fail_setup  # type: ignore[method-assign]
+    manager._set_rpm_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="setup failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == ["setup", ("repository", False)]
+
+
+def test_failed_apt_wazuh_install_disables_repository() -> None:
+    events: list[object] = []
+
+    class AptCleanupRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert args == ["apt-get", "update"]
+            assert privileged is True
+            events.append(("refresh", args))
+            return SimpleNamespace(returncode=0)
+
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = AptCleanupRunner()
+
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_apt_repository = lambda: events.append("enable")  # type: ignore[method-assign]
+
+    def fail_install(packages: list[str]) -> None:
+        events.append(("install", packages))
+        raise RuntimeError("install failed")
+
+    manager._apt_install = fail_install  # type: ignore[method-assign]
+    manager._set_apt_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == [
+        "enable",
+        ("install", ["wazuh-manager=4.14.8-1"]),
+        ("repository", False),
+        ("refresh", ["apt-get", "update"]),
+    ]
+
+
+def test_failed_rpm_wazuh_install_disables_repository() -> None:
+    events: list[object] = []
+
+    class FailingRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert privileged is True
+            events.append(("install", args))
+            raise RuntimeError("install failed")
+
+    manager = object.__new__(PackageManager)
+    manager.family = "rpm"
+    manager.command = "dnf"
+    manager.runner = FailingRunner()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_rpm_repository = lambda: events.append("enable")  # type: ignore[method-assign]
+    manager._set_rpm_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == [
+        "enable",
+        ("install", ["dnf", "-y", "install", "wazuh-manager-4.14.8-1"]),
+        ("repository", False),
+    ]
+
+
+def test_repository_cleanup_failure_does_not_hide_install_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_apt_repository = lambda: None  # type: ignore[method-assign]
+
+    def fail_install(packages: list[str]) -> None:
+        del packages
+        raise ValueError("original install failure")
+
+    def fail_cleanup(enabled: bool) -> None:
+        assert enabled is False
+        raise RuntimeError("cleanup failure")
+
+    manager._apt_install = fail_install  # type: ignore[method-assign]
+    manager._set_apt_repository_enabled = fail_cleanup  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="original install failure"):
+        manager.install_wazuh(None)
+
+    assert "cleanup failure" in caplog.text
+
+
+def test_package_manager_selection_uses_trusted_path() -> None:
+    class TrustedPathRunner:
+        def __init__(self) -> None:
+            self.lookups: list[str] = []
+
+        def trusted_which(self, command: str) -> str | None:
+            self.lookups.append(command)
+            if command == "dnf":
+                return "/usr/bin/dnf"
+            return None
+
+    runner = TrustedPathRunner()
+    manager = PackageManager(runner)  # type: ignore[arg-type]
+
+    assert manager.family == "rpm"
+    assert manager.command == "dnf"
+    assert runner.lookups == ["apt-get", "dnf"]
+
+
+def test_service_manager_uses_trusted_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lookups: list[str] = []
+
+    def trusted_which(command: str) -> str | None:
+        lookups.append(command)
+        if command == "service":
+            return "/usr/sbin/service"
+        return None
+
+    monkeypatch.setattr(CommandRunner, "trusted_which", staticmethod(trusted_which))
+
+    assert provisioning._service_manager() == "sysv"
+    assert lookups == ["systemctl", "service"]
+
+
 def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
     manager = _apt_manager(
         DpkgRunner(
@@ -357,6 +554,30 @@ def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
     )
 
     assert manager.installed_version() is None
+
+
+def test_installed_rpm_wazuh_package_uses_trusted_query_path() -> None:
+    class RpmVersionRunner:
+        def trusted_which(self, command: str) -> str | None:
+            return "/usr/bin/rpm" if command == "rpm" else None
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            assert privileged is False
+            assert args == [
+                "/usr/bin/rpm",
+                "-q",
+                "--qf",
+                "%{VERSION}-%{RELEASE}",
+                "wazuh-manager",
+            ]
+            return "4.14.8-1"
+
+    manager = object.__new__(PackageManager)
+    manager.runner = RpmVersionRunner()
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    assert manager.installed_version() == "4.14.8"
 
 
 def test_installed_apt_wazuh_package_returns_normalized_version() -> None:
@@ -387,6 +608,176 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     manager.ensure_system_dependencies()
 
     assert installed == [["python3-venv"]]
+
+
+def test_missing_trusted_rpm_query_is_reported() -> None:
+    class MissingRpmRunner:
+        def trusted_which(self, command: str) -> str | None:
+            return None
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            raise AssertionError(
+                f"package query must not run when trusted rpm is missing: {args}, {privileged}"
+            )
+
+    manager = object.__new__(PackageManager)
+    manager.runner = MissingRpmRunner()
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    with pytest.raises(
+        provisioning.UnsupportedPlatformError,
+        match="required package query command not found: rpm",
+    ):
+        manager.installed_version()
+
+
+def test_rpm_dependencies_accept_coreutils_single_commands() -> None:
+    class RpmRunner:
+        def __init__(self) -> None:
+            self.installs: list[list[str]] = []
+
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            if args[:2] == ["/usr/bin/rpm", "-q"]:
+                if args[2] not in {"python3", "util-linux", "findutils", "gnupg2"}:
+                    raise AssertionError(f"unexpected RPM dependency probe: {args[2]}")
+                return SimpleNamespace(returncode=1 if args[2] == "gnupg2" else 0)
+            if args[:3] == ["dnf", "-y", "install"]:
+                assert privileged is True
+                self.installs.append(args[3:])
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+        def trusted_which(self, command: str) -> str | None:
+            return f"/usr/bin/{command}"
+
+    runner = RpmRunner()
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    manager.ensure_system_dependencies()
+
+    assert runner.installs == [["gnupg2"]]
+
+
+def test_rpm_dependencies_install_coreutils_when_commands_are_missing() -> None:
+    class RpmRunner:
+        def __init__(self) -> None:
+            self.installs: list[list[str]] = []
+
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            if args[:2] == ["/usr/bin/rpm", "-q"]:
+                return SimpleNamespace(returncode=0)
+            if args[:3] == ["dnf", "-y", "install"]:
+                assert privileged is True
+                self.installs.append(args[3:])
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+        def trusted_which(self, command: str) -> str | None:
+            return None if command == "install" else f"/usr/bin/{command}"
+
+    runner = RpmRunner()
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    manager.ensure_system_dependencies()
+
+    assert runner.installs == [["coreutils"]]
+
+
+def test_missing_fstab_is_created_with_first_bind_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingFstabRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert privileged is True
+            assert args == ["test", "-e", "/etc/fstab"]
+            return SimpleNamespace(returncode=1)
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            raise AssertionError(f"missing fstab must not be read: {args}, {privileged}")
+
+    written: list[tuple[Path, str]] = []
+    monkeypatch.setattr(
+        provisioning,
+        "_write_privileged",
+        lambda runner, path, content, **kwargs: written.append((path, content)),
+    )
+
+    provisioning._ensure_fstab(
+        MissingFstabRunner(),
+        Path("/workspace/rules"),
+        Path("/var/ossec/etc/rules"),
+    )
+
+    assert written == [
+        (
+            Path("/etc/fstab"),
+            "/workspace/rules /var/ossec/etc/rules none bind 0 0\n",
+        )
+    ]
+
+
+def test_rollback_removes_fstab_created_by_failed_init(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir(parents=True)
+    restored: list[Path] = []
+
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: False)
+    monkeypatch.setattr(
+        provisioning,
+        "_restore_text_if_changed",
+        lambda runner, path, original: restored.append(path),
+    )
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: None)
+
+    snapshot = ProvisioningSnapshot(
+        service_was_active=False,
+        service_was_enabled=None,
+        ossec_conf="original ossec",
+        windows_rules="original windows",
+        fstab=None,
+        preexisting_mounts=frozenset(),
+    )
+
+    provisioning._rollback_provisioning(runner, workspace, snapshot)
+
+    assert ["rm", "-f", "/etc/fstab"] in runner.commands
+    assert restored == [
+        provisioning.OSSEC_CONF,
+        provisioning.WINDOWS_RULES,
+    ]
 
 
 def test_group_membership_already_present_skips_usermod() -> None:

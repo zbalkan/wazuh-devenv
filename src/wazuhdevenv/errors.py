@@ -1,4 +1,4 @@
-"""Domain exceptions for wazuh-devenv."""
+"""Domain exceptions for wazuhdevenv."""
 
 
 class WazuhDevenvError(RuntimeError):
