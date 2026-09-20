@@ -389,6 +389,80 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
+def test_rpm_dependencies_accept_coreutils_single_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RpmRunner:
+        def __init__(self) -> None:
+            self.installs: list[list[str]] = []
+
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            if args[:2] == ["rpm", "-q"]:
+                return SimpleNamespace(returncode=1 if args[2] == "gnupg2" else 0)
+            if args[:3] == ["dnf", "-y", "install"]:
+                assert privileged is True
+                self.installs.append(args[3:])
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+    runner = RpmRunner()
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    manager.family = "rpm"
+    manager.command = "dnf"
+    monkeypatch.setattr(provisioning.shutil, "which", lambda command: f"/usr/bin/{command}")
+
+    manager.ensure_system_dependencies()
+
+    assert runner.installs == [["gnupg2"]]
+
+
+def test_rpm_dependencies_install_coreutils_when_commands_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RpmRunner:
+        def __init__(self) -> None:
+            self.installs: list[list[str]] = []
+
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            if args[:2] == ["rpm", "-q"]:
+                return SimpleNamespace(returncode=0)
+            if args[:3] == ["dnf", "-y", "install"]:
+                assert privileged is True
+                self.installs.append(args[3:])
+                return SimpleNamespace(returncode=0)
+            raise AssertionError(f"unexpected command: {args}")
+
+    runner = RpmRunner()
+    manager = object.__new__(PackageManager)
+    manager.runner = runner
+    manager.family = "rpm"
+    manager.command = "dnf"
+    monkeypatch.setattr(
+        provisioning.shutil,
+        "which",
+        lambda command: None if command == "install" else f"/usr/bin/{command}",
+    )
+
+    manager.ensure_system_dependencies()
+
+    assert runner.installs == [["coreutils"]]
+
+
 def test_group_membership_already_present_skips_usermod() -> None:
     class GroupRunner:
         def __init__(self) -> None:
