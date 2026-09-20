@@ -794,7 +794,41 @@ def test_rollback_restores_active_but_disabled_systemd_service(
     )
 
     assert ["systemctl", "disable", "wazuh-manager"] in runner.commands
-    assert ["systemctl", "restart", "wazuh-manager"] in runner.commands
+    assert ["systemctl", "start", "wazuh-manager"] in runner.commands
+
+
+def test_start_wazuh_uses_start_after_deliberate_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+
+    provisioning.start_wazuh(runner)
+
+    assert ["systemctl", "start", "wazuh-manager"] in runner.commands
+    assert ["systemctl", "restart", "wazuh-manager"] not in runner.commands
+
+
+def test_start_wazuh_uses_sysv_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "sysv")
+
+    provisioning.start_wazuh(runner)
+
+    assert ["service", "wazuh-manager", "start"] in runner.commands
+    assert ["service", "wazuh-manager", "restart"] not in runner.commands
+
+
+def test_logtest_timeout_reports_troubleshooting_commands() -> None:
+    with pytest.raises(ConfigurationError) as exc_info:
+        provisioning.wait_for_logtest(RecordingRunner(), timeout=0)
+
+    message = str(exc_info.value)
+    assert "systemctl status wazuh-manager" in message
+    assert "journalctl -u wazuh-manager" in message
+    assert "/var/ossec/queue/sockets" in message
 
 
 def test_initialize_rolls_back_when_state_persistence_fails(

@@ -741,9 +741,9 @@ def start_wazuh(runner: CommandRunner, *, enable: bool | None = True) -> None:
             runner.run(["systemctl", "enable", "wazuh-manager"], privileged=True)
         elif enable is False:
             runner.run(["systemctl", "disable", "wazuh-manager"], privileged=True)
-        runner.run(["systemctl", "restart", "wazuh-manager"], privileged=True)
+        runner.run(["systemctl", "start", "wazuh-manager"], privileged=True)
     else:
-        runner.run(["service", "wazuh-manager", "restart"], privileged=True)
+        runner.run(["service", "wazuh-manager", "start"], privileged=True)
 
 
 def wait_for_logtest(runner: CommandRunner, timeout: int = 120, stable_for: int = 5) -> None:
@@ -760,7 +760,12 @@ def wait_for_logtest(runner: CommandRunner, timeout: int = 120, stable_for: int 
         else:
             stable = 0
         time.sleep(1)
-    raise ConfigurationError(f"timeout waiting for stable logtest socket: {LOGTEST_SOCKET}")
+    raise ConfigurationError(
+        f"timeout waiting for stable logtest socket: {LOGTEST_SOCKET}; "
+        "check 'sudo systemctl status wazuh-manager', "
+        "'sudo journalctl -u wazuh-manager -n 50 --no-pager', and "
+        "'sudo ls -l /var/ossec/queue/sockets'"
+    )
 
 
 def ensure_workspace_venv(runner: CommandRunner, workspace: Path) -> None:
