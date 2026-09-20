@@ -312,11 +312,19 @@ def uninstall_environment(home: Path, user: InvokingUser) -> Path:
             _render_windows_rule_testing,
         )
 
+    remove_venv = provenance.get("workspace_venv_created_by_tool") is True
+    venv = workspace / ".venv"
+    if remove_venv and venv.is_symlink():
+        raise ConfigurationError(
+            f"workspace virtual environment became a symlink: {venv}"
+        )
+
     service_was_active = is_wazuh_active(runner)
     service_was_enabled = is_wazuh_enabled(runner)
 
-    stop_wazuh(runner)
+    # Validate and remove only our exact fstab entries before stopping Wazuh.
     _remove_fstab_entries(runner, workspace, preexisting_fstab)
+    stop_wazuh(runner)
     _remove_mounts(runner, workspace, preexisting_mounts)
     _cleanup_workspace_access(runner, workspace, user)
     _remove_group_membership(runner, user, provenance)
@@ -349,13 +357,7 @@ def uninstall_environment(home: Path, user: InvokingUser) -> Path:
             was_enabled=service_was_enabled,
         )
 
-    if provenance.get("workspace_venv_created_by_tool") is True:
-        venv = workspace / ".venv"
-        if venv.is_symlink():
-            raise ConfigurationError(
-                f"workspace virtual environment became a symlink: {venv}"
-            )
-        if venv.exists():
-            shutil.rmtree(venv)
+    if remove_venv and venv.exists():
+        shutil.rmtree(venv)
 
     return workspace
