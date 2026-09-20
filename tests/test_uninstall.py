@@ -337,14 +337,14 @@ def test_remove_fstab_entries_preserves_unrelated_content_and_reloads_systemd(
     rules = (workspace / "rules").resolve()
     decoders = (workspace / "decoders").resolve()
     original = (
-        "UUID=root / ext4 defaults 0 1\\n"
-        f"{rules} /var/ossec/etc/rules none bind 0 0\\n"
-        f"{decoders} /var/ossec/etc/decoders none bind 0 0\\n"
-        "# keep this comment\\n"
+        "UUID=root / ext4 defaults 0 1\n"
+        f"{rules} /var/ossec/etc/rules none bind 0 0\n"
+        f"{decoders} /var/ossec/etc/decoders none bind 0 0\n"
+        "# keep this comment\n"
     )
     expected = (
-        "UUID=root / ext4 defaults 0 1\\n"
-        "# keep this comment\\n"
+        "UUID=root / ext4 defaults 0 1\n"
+        "# keep this comment\n"
     )
     current = original
     writes: list[str] = []
@@ -394,7 +394,7 @@ def test_remove_fstab_entries_refuses_if_rewrite_does_not_persist(
 ) -> None:
     workspace = tmp_path / "workspace"
     rules = (workspace / "rules").resolve()
-    original = f"{rules} /var/ossec/etc/rules none bind 0 0\\n"
+    original = f"{rules} /var/ossec/etc/rules none bind 0 0\n"
 
     monkeypatch.setattr(
         uninstall,
