@@ -69,7 +69,9 @@ def _is_rule_id_attribute(node: ast.AST) -> bool:
 def _rule_ids_from_compare(node: ast.Compare) -> set[str]:
     found: set[str] = set()
     operands = [node.left, *node.comparators]
-    for left, right in zip(operands, operands[1:]):
+    for left, operator, right in zip(operands, node.ops, operands[1:]):
+        if not isinstance(operator, ast.Eq):
+            continue
         if _is_rule_id_attribute(left):
             value = _literal_rule_id(right)
             if value is not None:
