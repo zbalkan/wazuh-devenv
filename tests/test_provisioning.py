@@ -354,11 +354,26 @@ def test_repository_setup_refuses_to_overwrite_custom_configuration(
 
 
 def test_failed_apt_wazuh_install_disables_repository() -> None:
+    events: list[object] = []
+
+    class AptCleanupRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert args == ["apt-get", "update"]
+            assert privileged is True
+            events.append(("refresh", args))
+            return SimpleNamespace(returncode=0)
+
     manager = object.__new__(PackageManager)
     manager.family = "apt"
     manager.command = "apt-get"
-    manager.runner = object()
-    events: list[object] = []
+    manager.runner = AptCleanupRunner()
 
     manager.installed_version = lambda: None  # type: ignore[method-assign]
     manager._setup_apt_repository = lambda: events.append("enable")  # type: ignore[method-assign]
@@ -379,6 +394,7 @@ def test_failed_apt_wazuh_install_disables_repository() -> None:
         "enable",
         ("install", ["wazuh-manager=4.14.8-1"]),
         ("repository", False),
+        ("refresh", ["apt-get", "update"]),
     ]
 
 
