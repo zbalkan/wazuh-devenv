@@ -25,9 +25,15 @@ def ensure_managed_home(path: Path) -> None:
         child.mkdir(exist_ok=True)
 
 
+def managed_lock_path(path: Path) -> Path:
+    """Return the stable lock path used to serialize managed-home operations."""
+    return path.with_name(f"{path.name}.lock")
+
+
 @contextmanager
 def managed_lock(path: Path) -> Iterator[None]:
-    lock_path = path / "wazuhdevenv.lock"
+    lock_path = managed_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
     try:
         fd = os.open(lock_path, flags, 0o600)

@@ -123,11 +123,16 @@ class ProvisioningSnapshot:
     windows_rules: str
     fstab: str | None
     preexisting_mounts: frozenset[Path]
+    ossec_backup_preexisting: bool = False
+    windows_backup_preexisting: bool = False
 
 
 class PackageManager:
     def __init__(self, runner: CommandRunner) -> None:
         self.runner = runner
+        self.wazuh_installed_by_tool = False
+        self.repository_before: str | None = None
+        self.apt_keyring_preexisting: bool | None = None
         if runner.trusted_which("apt-get"):
             self.family = "apt"
             self.command = "apt-get"
@@ -194,7 +199,7 @@ class PackageManager:
             privileged=True,
         )
 
-    def ensure_system_dependencies(self) -> None:
+    def ensure_system_dependencies(self) -> list[str]:
         if self.family == "apt":
             packages = [
                 "python3-venv",
@@ -211,7 +216,7 @@ class PackageManager:
             ]
             if missing:
                 self._apt_install(missing)
-            return
+            return missing
 
         packages = ["python3", "util-linux", "findutils", "gnupg2"]
         missing = [
@@ -226,11 +231,13 @@ class PackageManager:
         coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "rm", "stat", "test")
         if any(self.runner.trusted_which(command) is None for command in coreutils_commands):
             missing.append("coreutils")
+        missing = list(dict.fromkeys(missing))
         if missing:
             self.runner.run(
                 [self.command, "-y", "install", *missing],
                 privileged=True,
             )
+        return missing
 
     def _set_apt_repository_enabled(self, enabled: bool) -> None:
         path = Path("/etc/apt/sources.list.d/wazuh.list")
@@ -318,6 +325,23 @@ class PackageManager:
                 )
             LOG.info("Wazuh Manager already installed: %s", current)
             return current
+
+        if hasattr(self, "wazuh_installed_by_tool"):
+            self.wazuh_installed_by_tool = True
+            repository_path = (
+                Path("/etc/apt/sources.list.d/wazuh.list")
+                if self.family == "apt"
+                else Path("/etc/yum.repos.d/wazuh.repo")
+            )
+            self.repository_before = _read_optional_privileged(
+                self.runner,
+                repository_path,
+            )
+            if self.family == "apt":
+                self.apt_keyring_preexisting = _privileged_exists(
+                    self.runner,
+                    Path("/usr/share/keyrings/wazuh.gpg"),
+                )
 
         LOG.info("Installing Wazuh Manager")
         if self.family == "apt":
@@ -495,7 +519,12 @@ def configure_ossec(runner: CommandRunner) -> None:
         backup = OSSEC_CONF.with_name("ossec.conf.wazuhdevenv.bak")
         if not _privileged_exists(runner, backup):
             runner.run(
-                ["cp", "--preserve=mode,ownership,timestamps", str(OSSEC_CONF), str(backup)],
+                [
+                    "cp",
+                    "--preserve=mode,ownership,timestamps",
+                    str(OSSEC_CONF),
+                    str(backup),
+                ],
                 privileged=True,
             )
         _rewrite_preserving_metadata(runner, OSSEC_CONF, text)
@@ -517,7 +546,12 @@ def configure_windows_rule_testing(runner: CommandRunner) -> None:
     backup = WINDOWS_RULES.with_name(WINDOWS_RULES.name + ".wazuhdevenv.bak")
     if not _privileged_exists(runner, backup):
         runner.run(
-            ["cp", "--preserve=mode,ownership,timestamps", str(WINDOWS_RULES), str(backup)],
+            [
+                "cp",
+                "--preserve=mode,ownership,timestamps",
+                str(WINDOWS_RULES),
+                str(backup),
+            ],
             privileged=True,
         )
     _rewrite_preserving_metadata(runner, WINDOWS_RULES, text)
@@ -674,10 +708,10 @@ def configure_bind_mounts(
         _ensure_fstab(runner, source, target)
 
 
-def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
+def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> bool:
     groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" in groups:
-        return
+        return False
     runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
     groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" not in groups:
@@ -689,6 +723,7 @@ def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
         "Wazuh tools without sudo.",
         user.name,
     )
+    return True
 
 
 def configure_default_acls(runner: CommandRunner, workspace: Path) -> None:
@@ -868,6 +903,16 @@ def _capture_snapshot(
         windows_rules=runner.capture(["cat", str(WINDOWS_RULES)], privileged=True),
         fstab=_read_optional_privileged(runner, Path("/etc/fstab")),
         preexisting_mounts=frozenset(preexisting_mounts),
+        ossec_backup_preexisting=_privileged_exists(
+            runner,
+            OSSEC_CONF.with_name("ossec.conf.wazuhdevenv.bak"),
+        ),
+        windows_backup_preexisting=_privileged_exists(
+            runner,
+            WINDOWS_RULES.with_name(
+                WINDOWS_RULES.name + ".wazuhdevenv.bak"
+            ),
+        ),
     )
 
 
@@ -940,6 +985,72 @@ def _rollback_provisioning(
         )
 
 
+def _pending_provisioning(
+    state: dict[str, object],
+    workspace: Path,
+    package_manager: PackageManager,
+) -> dict[str, object]:
+    value = state.get("provisioning_pending")
+    if value is None:
+        return {
+            "workspace": str(workspace),
+            "package_manager_family": package_manager.family,
+            "workspace_venv_created_by_tool": False,
+            "wazuh_installed_by_tool": False,
+            "group_membership_added": False,
+            "system_dependencies_installed": [],
+            "repository_before": None,
+            "apt_keyring_preexisting": None,
+        }
+    if not isinstance(value, dict):
+        raise ConfigurationError("invalid pending provisioning state")
+    if value.get("workspace") != str(workspace):
+        raise ConfigurationError(
+            "a previous failed init left recoverable state for a different "
+            f"workspace: {value.get('workspace')}; retry that workspace first"
+        )
+    if value.get("package_manager_family") != package_manager.family:
+        raise ConfigurationError(
+            "package manager differs from the previous failed init"
+        )
+    for field in (
+        "workspace_venv_created_by_tool",
+        "wazuh_installed_by_tool",
+        "group_membership_added",
+    ):
+        if not isinstance(value.get(field), bool):
+            raise ConfigurationError(
+                f"invalid {field} in pending provisioning state"
+            )
+    dependencies = value.get("system_dependencies_installed")
+    if not isinstance(dependencies, list) or not all(
+        isinstance(item, str) for item in dependencies
+    ):
+        raise ConfigurationError(
+            "invalid system_dependencies_installed in pending provisioning state"
+        )
+    repository_before = value.get("repository_before")
+    if repository_before is not None and not isinstance(repository_before, str):
+        raise ConfigurationError(
+            "invalid repository_before in pending provisioning state"
+        )
+    keyring_before = value.get("apt_keyring_preexisting")
+    if keyring_before is not None and not isinstance(keyring_before, bool):
+        raise ConfigurationError(
+            "invalid apt_keyring_preexisting in pending provisioning state"
+        )
+    return dict(value)
+
+
+def _save_pending_provisioning(
+    home: Path,
+    state: dict[str, object],
+    pending: dict[str, object],
+) -> None:
+    state["provisioning_pending"] = pending
+    save_state(home, state)
+
+
 def initialize(
     workspace: Path,
     home: Path,
@@ -961,13 +1072,51 @@ def initialize(
 
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
+    pending = _pending_provisioning(state, workspace, package_manager)
 
-    package_manager.ensure_system_dependencies()
+    installed_dependencies = package_manager.ensure_system_dependencies() or []
+    previous_dependencies = pending["system_dependencies_installed"]
+    assert isinstance(previous_dependencies, list)
+    pending["system_dependencies_installed"] = list(
+        dict.fromkeys([*previous_dependencies, *installed_dependencies])
+    )
+    _save_pending_provisioning(home, state, pending)
+
     _service_manager()
     prepare_workspace(workspace, user)
+
+    venv = workspace / ".venv"
+    if not venv.exists() and pending["workspace_venv_created_by_tool"] is False:
+        pending["workspace_venv_created_by_tool"] = True
+        _save_pending_provisioning(home, state, pending)
     ensure_workspace_venv(runner, workspace)
 
+    current_wazuh = package_manager.installed_version()
+    if current_wazuh is None and pending["wazuh_installed_by_tool"] is False:
+        repository_path = (
+            Path("/etc/apt/sources.list.d/wazuh.list")
+            if package_manager.family == "apt"
+            else Path("/etc/yum.repos.d/wazuh.repo")
+        )
+        pending["wazuh_installed_by_tool"] = True
+        pending["repository_before"] = _read_optional_privileged(
+            runner,
+            repository_path,
+        )
+        pending["apt_keyring_preexisting"] = (
+            _privileged_exists(
+                runner,
+                Path("/usr/share/keyrings/wazuh.gpg"),
+            )
+            if package_manager.family == "apt"
+            else None
+        )
+        _save_pending_provisioning(home, state, pending)
+
     installed = package_manager.install_wazuh(wazuh_version)
+    wazuh_installed_by_tool = bool(pending["wazuh_installed_by_tool"])
+    repository_before = pending["repository_before"]
+    apt_keyring_preexisting = pending["apt_keyring_preexisting"]
 
     preflight_bind_mounts(runner, workspace)
     service_was_active = is_wazuh_active(runner)
@@ -983,15 +1132,62 @@ def initialize(
     _render_ossec_config(snapshot.ossec_conf)
     _render_windows_rule_testing(snapshot.windows_rules)
 
+    preexisting_fstab_entries: list[str] = []
+    for name in ("rules", "decoders"):
+        source = (workspace / name).resolve()
+        target = WAZUH_HOME / "etc" / name
+        expected = f"{source} {target} none bind 0 0"
+        if any(
+            line.strip() == expected
+            for line in (snapshot.fstab or "").splitlines()
+        ):
+            preexisting_fstab_entries.append(str(target))
+
+    group_added_now = ensure_group_membership(runner, user)
+    if group_added_now and pending["group_membership_added"] is False:
+        pending["group_membership_added"] = True
+        _save_pending_provisioning(home, state, pending)
+    group_membership_added = bool(pending["group_membership_added"])
+    workspace_venv_created_by_tool = bool(
+        pending["workspace_venv_created_by_tool"]
+    )
+
     state.update(
         {
             "workspace": str(workspace),
             "wazuh_home": str(WAZUH_HOME),
             "wazuh_version": installed,
+            "provisioning": {
+                "wazuh_installed_by_tool": wazuh_installed_by_tool,
+                "workspace_venv_created_by_tool": workspace_venv_created_by_tool,
+                "group_membership_added": group_membership_added,
+                "service_was_active": snapshot.service_was_active,
+                "service_was_enabled": snapshot.service_was_enabled,
+                "preexisting_mounts": sorted(
+                    str(path) for path in snapshot.preexisting_mounts
+                ),
+                "preexisting_fstab_entries": preexisting_fstab_entries,
+                "package_manager_family": getattr(
+                    package_manager, "family", None
+                ),
+                "system_dependencies_installed": list(
+                    pending["system_dependencies_installed"]
+                ),
+                "repository_before": repository_before,
+                "apt_keyring_preexisting": apt_keyring_preexisting,
+                "ossec_conf_before": snapshot.ossec_conf,
+                "windows_rules_before": snapshot.windows_rules,
+                "ossec_backup_preexisting": (
+                    snapshot.ossec_backup_preexisting
+                ),
+                "windows_backup_preexisting": (
+                    snapshot.windows_backup_preexisting
+                ),
+            },
         }
     )
 
-    ensure_group_membership(runner, user)
+    state.pop("provisioning_pending", None)
 
     try:
         stop_wazuh(runner)

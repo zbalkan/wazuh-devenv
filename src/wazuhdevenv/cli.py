@@ -6,6 +6,7 @@ import argparse
 import errno
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
 from .state import ensure_managed_home, load_state, managed_lock
+from .uninstall import format_uninstall_report, uninstall_environment
 
 LOG = logging.getLogger("wazuhdevenv")
 
@@ -46,6 +48,11 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "coverage",
         help="Report custom rule coverage from workspace tests",
+    )
+
+    commands.add_parser(
+        "uninstall",
+        help="Remove the managed development environment",
     )
 
     return parser
@@ -112,39 +119,37 @@ def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
 
 def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     workspace = resolve_workspace(args.path)
-    with managed_lock(home):
-        LOG.info("Provisioning workspace: %s", workspace)
-        version = initialize(
-            workspace,
-            home,
-            user,
-            wazuh_version=args.wazuh_version,
-        )
-        LOG.info("Wazuh Manager ready: %s", version)
-        if not args.skip_corpus:
-            tester_version = _workspace_wazuhtester_version(user, home)
-            try:
-                corpus = update_corpus(home, version, tester_version)
-            except CorpusError as exc:
-                raise CorpusError(
-                    "Wazuh initialization completed, but rule-test corpus installation failed. "
-                    f"{exc}. Do not run 'init' again; after correcting the reported problem, "
-                    "run 'wazuhdevenv update'."
-                ) from exc
-            LOG.info("Managed rule-test corpus ready: %s", corpus)
+    LOG.info("Provisioning workspace: %s", workspace)
+    version = initialize(
+        workspace,
+        home,
+        user,
+        wazuh_version=args.wazuh_version,
+    )
+    LOG.info("Wazuh Manager ready: %s", version)
+    if not args.skip_corpus:
+        tester_version = _workspace_wazuhtester_version(user, home)
+        try:
+            corpus = update_corpus(home, version, tester_version)
+        except CorpusError as exc:
+            raise CorpusError(
+                "Wazuh initialization completed, but rule-test corpus installation failed. "
+                f"{exc}. Do not run 'init' again; after correcting the reported problem, "
+                "run 'wazuhdevenv update'."
+            ) from exc
+        LOG.info("Managed rule-test corpus ready: %s", corpus)
     return 0
 
 
 def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
-    with managed_lock(home):
-        version = _installed_wazuh_version(user, home)
-        tester_version = _workspace_wazuhtester_version(user, home)
-        if args.check:
-            release = resolve_release(version, tester_version)
-            print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
-            return 0
-        installed = update_corpus(home, version, tester_version)
-        LOG.info("Managed rule-test corpus ready: %s", installed)
+    version = _installed_wazuh_version(user, home)
+    tester_version = _workspace_wazuhtester_version(user, home)
+    if args.check:
+        release = resolve_release(version, tester_version)
+        print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
+        return 0
+    installed = update_corpus(home, version, tester_version)
+    LOG.info("Managed rule-test corpus ready: %s", installed)
     return 0
 
 
@@ -161,6 +166,13 @@ def _coverage_command(home: Path) -> int:
     return 0
 
 
+def _uninstall_command(user: InvokingUser, home: Path) -> int:
+    result = uninstall_environment(home, user)
+    shutil.rmtree(home)
+    print(format_uninstall_report(result, home))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     logging_ready = False
@@ -173,16 +185,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         user = InvokingUser.current()
         home = managed_home(user)
-        ensure_managed_home(home)
-        _configure_logging(home, args.verbose)
-        logging_ready = True
+        with managed_lock(home):
+            ensure_managed_home(home)
+            _configure_logging(home, args.verbose)
+            logging_ready = True
 
-        if args.command == "init":
-            return _init_command(args, user, home)
-        if args.command == "update":
-            return _update_command(args, user, home)
-        if args.command == "coverage":
-            return _coverage_command(home)
+            if args.command == "init":
+                return _init_command(args, user, home)
+            if args.command == "update":
+                return _update_command(args, user, home)
+            if args.command == "coverage":
+                return _coverage_command(home)
+            if args.command == "uninstall":
+                return _uninstall_command(user, home)
     except (WazuhDevenvError, ValueError, OSError, RuntimeError) as exc:
         if logging_ready:
             LOG.error("%s", exc)
