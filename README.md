@@ -223,6 +223,42 @@ wazuhdevenv update --check
 
 `update` does not upgrade Wazuh Manager, `wazuhdevenv`, `wazuhtester`, or user content.
 
+## Uninstall the development environment
+
+Remove the host integration created by `wazuhdevenv` with:
+
+```bash
+wazuhdevenv uninstall
+```
+
+The uninstall command is intentionally ownership-aware. It unmounts the managed
+`rules` and `decoders` bind mounts, removes only the matching entries added to
+`/etc/fstab`, removes `wazuh` group membership only when initialization added
+it, and deletes the managed `~/.wazuhdevenv` state.
+
+The project content under `rules/`, `decoders/`, and `tests/` is preserved.
+The workspace `.venv` is removed only when `wazuhdevenv` created that
+directory.
+
+If initialization installed Wazuh Manager, uninstall removes the package and
+the tool-owned `/var/ossec` tree, then restores or removes the Wazuh package
+repository according to its pre-initialization state. On APT systems, a keyring
+created by `wazuhdevenv` is also removed when the repository was created by
+the tool.
+
+If Wazuh Manager already existed before initialization, uninstall preserves the
+package. It restores `ossec.conf` and the Windows rule-test modification from
+the initialization backups, but refuses to overwrite those files if they have
+changed since initialization.
+
+State created before uninstall provenance tracking is handled conservatively:
+the managed mounts, fstab entries, and Wazuh configuration are cleaned up, but
+Wazuh Manager, group membership, and the workspace virtual environment are
+preserved because their ownership cannot be established safely.
+
+System packages installed as provisioning prerequisites are not automatically
+removed because they may be shared by other software.
+
 ## Development
 
 Run the package tests:
