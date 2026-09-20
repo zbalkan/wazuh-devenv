@@ -12,7 +12,7 @@ The tooling is deliberately separated by responsibility:
 | --- | --- |
 | `wazuhtester` | reusable Wazuh logtest library, CLI, and pytest plugin |
 | `wazuh-rule-tests` | versioned pytest regression corpus for built-in Wazuh rules |
-| `wazuhcoverage` | Wazuh JSON archive coverage analysis |
+| `wazuhcoverage` | runtime Wazuh JSON archive coverage analysis |
 | `wazuh-testgen` | generation of pytest rule-test content |
 | `wazuh-devenv` | environment installation, configuration, managed content, and orchestration |
 
@@ -149,6 +149,31 @@ Run both together:
 ```
 
 These are ordinary pytest suites, so normal pytest selection, markers, fail-fast options, IDE integration, and plugins remain available without a `wazuh-devenv` wrapper.
+
+## Report custom rule test coverage
+
+`wazuh-devenv coverage` reports how many custom rule IDs defined under the initialized workspace's `rules/` directory are explicitly referenced by tests under `tests/`.
+
+```bash
+wazuhdevenv coverage
+```
+
+The analysis is static and read-only. It recognizes direct rule-ID assertions such as `assert response.rule_id == "100100"`, the equivalent reversed comparison, legacy `assertEqual` calls, and pytest parametrization where `rule_id` is one of the parameter columns. Built-in Wazuh rules are intentionally excluded: their regression corpus is maintained separately by `wazuh-rule-tests`.
+
+Example output:
+
+```text
+=== Wazuh Rule Coverage Report ===
+Total rules defined: 2
+Total test functions: 1
+Rules referenced in tests: 1
+Coverage: 50.00%
+
+Uncovered Rule IDs:
+  - 222016
+```
+
+This is different from `wazuhcoverage`, which analyzes runtime Wazuh JSON archive coverage rather than static test-to-rule coverage.
 
 ## Managed state
 
