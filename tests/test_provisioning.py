@@ -501,6 +501,55 @@ def test_initialize_checks_service_manager_before_install(
     assert events[-1] == "state"
 
 
+def test_group_membership_failure_does_not_enter_host_rollback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    user = InvokingUser("tester", os.getuid(), os.getgid(), tmp_path)
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def ensure_system_dependencies(self) -> None:
+            pass
+
+        def install_wazuh(self, requested_version: str | None) -> str:
+            del requested_version
+            return "4.14.8"
+
+    monkeypatch.setattr(provisioning, "ensure_linux", lambda: None)
+    monkeypatch.setattr(provisioning, "CommandRunner", lambda user: object())
+    monkeypatch.setattr(provisioning, "PackageManager", FakePackageManager)
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: "systemd")
+    monkeypatch.setattr(provisioning, "prepare_workspace", lambda *args: None)
+    monkeypatch.setattr(provisioning, "ensure_workspace_venv", lambda *args: None)
+    monkeypatch.setattr(provisioning, "preflight_bind_mounts", lambda *args: None)
+    monkeypatch.setattr(provisioning, "is_wazuh_active", lambda runner: True)
+    monkeypatch.setattr(provisioning, "is_wazuh_enabled", lambda runner: True)
+    monkeypatch.setattr(provisioning, "_capture_snapshot", lambda *args: _snapshot(active=True, enabled=True))
+    monkeypatch.setattr(provisioning, "_render_ossec_config", lambda value: value)
+    monkeypatch.setattr(provisioning, "_render_windows_rule_testing", lambda value: value)
+    monkeypatch.setattr(
+        provisioning,
+        "ensure_group_membership",
+        lambda *args: (_ for _ in ()).throw(ConfigurationError("group failure")),
+    )
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: events.append("stop"))
+    monkeypatch.setattr(
+        provisioning,
+        "_rollback_provisioning",
+        lambda *args: events.append("rollback"),
+    )
+    monkeypatch.setattr(provisioning, "load_state", lambda *args: {"schema_version": 1})
+
+    with pytest.raises(ConfigurationError, match="group failure"):
+        provisioning.initialize(tmp_path / "workspace", tmp_path / "home", user)
+
+    assert events == []
+
+
 def test_failed_host_configuration_uses_small_rollback_boundary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

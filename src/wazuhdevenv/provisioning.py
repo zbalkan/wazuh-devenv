@@ -863,8 +863,9 @@ def initialize(
         }
     )
 
+    ensure_group_membership(runner, user)
+
     try:
-        ensure_group_membership(runner, user)
         stop_wazuh(runner)
         configure_ossec(runner)
         configure_windows_rule_testing(runner)
