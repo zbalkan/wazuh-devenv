@@ -280,3 +280,49 @@ def test_coverage_command_requires_initialized_workspace(tmp_path: Path) -> None
 
     with pytest.raises(cli.WazuhDevenvError, match="workspace is not initialized"):
         cli._coverage_command(home)
+
+
+
+def test_uninstall_command_uses_lock_and_removes_managed_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _user(tmp_path)
+    home = tmp_path / "managed"
+    home.mkdir()
+    workspace = tmp_path / "workspace"
+    lock_calls: list[Path] = []
+    removed: list[Path] = []
+
+    @contextmanager
+    def fake_lock(path: Path):
+        lock_calls.append(path)
+        yield
+
+    class Result:
+        legacy_state = False
+
+        def __init__(self, path: Path) -> None:
+            self.workspace = path
+
+    monkeypatch.setattr(cli, "managed_lock", fake_lock)
+    monkeypatch.setattr(
+        cli,
+        "uninstall_environment",
+        lambda path, invoking_user: (
+            Result(workspace)
+            if path == home and invoking_user == user
+            else None
+        ),
+    )
+    monkeypatch.setattr(cli.shutil, "rmtree", lambda path: removed.append(path))
+
+    assert cli._uninstall_command(user, home) == 0
+    assert lock_calls == [home]
+    assert removed == [home]
+
+
+def test_parser_exposes_uninstall_command() -> None:
+    args = cli._parser().parse_args(["uninstall"])
+
+    assert args.command == "uninstall"
