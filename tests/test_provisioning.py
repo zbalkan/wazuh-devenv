@@ -42,9 +42,14 @@ class DpkgRunner:
     def __init__(self, states: dict[str, str]) -> None:
         self.states = states
 
+    def trusted_which(self, command: str) -> str | None:
+        if command == "dpkg-query":
+            return "/usr/bin/dpkg-query"
+        return None
+
     def capture(self, args: list[str], *, privileged: bool = False) -> str:
         del privileged
-        if args[:2] != ["dpkg-query", "-W"]:
+        if args[:2] != ["/usr/bin/dpkg-query", "-W"]:
             raise AssertionError(f"unexpected command: {args}")
         package = args[-1]
         value = self.states.get(package)
@@ -396,6 +401,30 @@ def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
     assert manager.installed_version() is None
 
 
+def test_installed_rpm_wazuh_package_uses_trusted_query_path() -> None:
+    class RpmVersionRunner:
+        def trusted_which(self, command: str) -> str | None:
+            return "/usr/bin/rpm" if command == "rpm" else None
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            assert privileged is False
+            assert args == [
+                "/usr/bin/rpm",
+                "-q",
+                "--qf",
+                "%{VERSION}-%{RELEASE}",
+                "wazuh-manager",
+            ]
+            return "4.14.8-1"
+
+    manager = object.__new__(PackageManager)
+    manager.runner = RpmVersionRunner()
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    assert manager.installed_version() == "4.14.8"
+
+
 def test_installed_apt_wazuh_package_returns_normalized_version() -> None:
     manager = _apt_manager(
         DpkgRunner(
@@ -426,6 +455,23 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
+def test_missing_trusted_rpm_query_is_reported() -> None:
+    class MissingRpmRunner:
+        def trusted_which(self, command: str) -> str | None:
+            return None
+
+    manager = object.__new__(PackageManager)
+    manager.runner = MissingRpmRunner()
+    manager.family = "rpm"
+    manager.command = "dnf"
+
+    with pytest.raises(
+        provisioning.UnsupportedPlatformError,
+        match="required package query command not found: rpm",
+    ):
+        manager.installed_version()
+
+
 def test_rpm_dependencies_accept_coreutils_single_commands() -> None:
     class RpmRunner:
         def __init__(self) -> None:
@@ -439,7 +485,7 @@ def test_rpm_dependencies_accept_coreutils_single_commands() -> None:
             check: bool = True,
         ) -> SimpleNamespace:
             del check
-            if args[:2] == ["rpm", "-q"]:
+            if args[:2] == ["/usr/bin/rpm", "-q"]:
                 if args[2] not in {"python3", "util-linux", "findutils", "gnupg2"}:
                     raise AssertionError(f"unexpected RPM dependency probe: {args[2]}")
                 return SimpleNamespace(returncode=1 if args[2] == "gnupg2" else 0)
@@ -476,7 +522,7 @@ def test_rpm_dependencies_install_coreutils_when_commands_are_missing() -> None:
             check: bool = True,
         ) -> SimpleNamespace:
             del check
-            if args[:2] == ["rpm", "-q"]:
+            if args[:2] == ["/usr/bin/rpm", "-q"]:
                 return SimpleNamespace(returncode=0)
             if args[:3] == ["dnf", "-y", "install"]:
                 assert privileged is True
