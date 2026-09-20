@@ -42,19 +42,19 @@ RPM_REPOSITORY_PATH = Path("/etc/yum.repos.d/wazuh.repo")
 APT_KEYRING_PATH = Path("/usr/share/keyrings/wazuh.gpg")
 
 
-def _required_state(home: Path) -> tuple[dict[str, object], Path, dict[str, object]]:
+def _required_state(
+    home: Path,
+) -> tuple[dict[str, object], Path, dict[str, object], bool]:
     state = load_state(home)
     workspace = state.get("workspace")
     if not isinstance(workspace, str):
         raise WazuhDevenvError("workspace is not initialized; nothing to uninstall")
 
     provenance = state.get("provisioning")
-    if not isinstance(provenance, dict):
-        raise ConfigurationError(
-            "state predates uninstall provenance tracking; automatic cleanup "
-            "would have to guess what wazuhdevenv created"
-        )
-    return state, Path(workspace), provenance
+    if isinstance(provenance, dict):
+        return state, Path(workspace), provenance, False
+
+    return state, Path(workspace), {}, True
 
 
 def _targets(values: object) -> set[Path]:
@@ -284,7 +284,14 @@ def _restore_service(
 
 
 def uninstall_environment(home: Path, user: InvokingUser) -> Path:
-    _, workspace, provenance = _required_state(home)
+    _, workspace, provenance, legacy_state = _required_state(home)
+    if legacy_state:
+        LOG.warning(
+            "State predates uninstall provenance tracking; cleaning managed "
+            "mounts and configuration but preserving Wazuh Manager, group "
+            "membership, and the workspace virtual environment."
+        )
+
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
 
