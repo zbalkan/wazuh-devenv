@@ -73,6 +73,7 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - persists the mounts in `/etc/fstab`;
 - adds the invoking developer to the `wazuh` group, which is required to use Wazuh tooling without root;
 - keeps the invoking developer as owner of workspace rules and decoders while granting the `wazuh` group access;
+- when `setfacl` is available and the filesystem supports ACLs, adds optional default ACLs so future rule and decoder files remain accessible to the `wazuh` account and group;
 - validates Wazuh configuration using Wazuh's own `-t` checks;
 - backs up and restores the Wazuh configuration, Windows testing rule, fstab entries, and newly created bind mounts if host configuration fails;
 - starts the manager and waits for a stable logtest socket;
@@ -85,7 +86,7 @@ The CLI is intended to be run as the developer:
 wazuhdevenv init
 ```
 
-It invokes `sudo` only for operations that require system privileges. Do not run the CLI itself with `sudo` or as root. If `init` adds your account to the `wazuh` group, start a new login session before using Wazuh tools without `sudo`; an already-running shell cannot acquire newly assigned supplementary groups.
+It invokes `sudo` only for operations that require system privileges. Do not run the CLI itself with `sudo` or as root. If `init` adds your account to the `wazuh` group, start a new login session before using Wazuh tools without `sudo`; an already-running shell cannot acquire newly assigned supplementary groups. Default ACLs are only a maintenance helper: they preserve access for future files but do not change file ownership. If `setfacl` is unavailable or the filesystem rejects ACLs, initialization continues normally.
 
 Do not run `init` again after it succeeds. A second invocation exits with the recorded workspace, Wazuh home, Wazuh version, and state-file path so the environment can be inspected manually. If only the managed rule-test corpus needs attention, use `wazuhdevenv update`; `init` does not act as a repair command.
 

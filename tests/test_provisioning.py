@@ -378,6 +378,68 @@ def test_group_membership_failure_is_fatal() -> None:
         provisioning.ensure_group_membership(GroupRunner(), user)
 
 
+def test_default_acls_are_applied_when_setfacl_is_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class AclRunner:
+        def __init__(self) -> None:
+            self.commands: list[tuple[list[str], bool]] = []
+
+        def run_as_user(
+            self,
+            args: list[str],
+            *,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            self.commands.append((args, check))
+            return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(provisioning.shutil, "which", lambda command: "/usr/bin/setfacl" if command == "setfacl" else None)
+    runner = AclRunner()
+    workspace = tmp_path / "workspace"
+
+    provisioning.configure_default_acls(runner, workspace)
+
+    acl = "u:wazuh:rwx,g:wazuh:rwx,o::---"
+    assert runner.commands == [
+        (["setfacl", "-d", "-m", acl, str(workspace / "rules")], False),
+        (["setfacl", "-d", "-m", acl, str(workspace / "decoders")], False),
+    ]
+
+
+def test_default_acls_are_optional_when_setfacl_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class AclRunner:
+        def run_as_user(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("setfacl must not be invoked")
+
+    monkeypatch.setattr(provisioning.shutil, "which", lambda command: None)
+
+    provisioning.configure_default_acls(AclRunner(), tmp_path / "workspace")
+
+
+def test_default_acl_failure_does_not_fail_provisioning_helper(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class AclRunner:
+        def run_as_user(
+            self,
+            args: list[str],
+            *,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del args, check
+            return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(provisioning.shutil, "which", lambda command: "/usr/bin/setfacl")
+
+    provisioning.configure_default_acls(AclRunner(), tmp_path / "workspace")
+
+
 def test_workspace_permissions_keep_invoking_user_as_owner(tmp_path: Path) -> None:
     runner = RecordingRunner()
     workspace = tmp_path / "workspace"
@@ -488,6 +550,7 @@ def test_initialize_checks_service_manager_before_install(
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: events.append("windows"))
     monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: events.append("mounts"))
     monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: events.append("permissions"))
+    monkeypatch.setattr(provisioning, "configure_default_acls", lambda *args: events.append("acls"))
     monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: events.append("validate"))
     monkeypatch.setattr(provisioning, "start_wazuh", lambda *args: events.append("start"))
     monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: events.append("ready"))
@@ -586,6 +649,7 @@ def test_failed_host_configuration_uses_small_rollback_boundary(
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_default_acls", lambda *args: None)
 
     def fail_validation(*args: object) -> None:
         raise ConfigurationError("invalid configuration")
@@ -695,6 +759,7 @@ def test_initialize_rolls_back_when_state_persistence_fails(
     monkeypatch.setattr(provisioning, "configure_windows_rule_testing", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_bind_mounts", lambda *args: None)
     monkeypatch.setattr(provisioning, "configure_permissions", lambda *args: None)
+    monkeypatch.setattr(provisioning, "configure_default_acls", lambda *args: None)
     monkeypatch.setattr(provisioning, "validate_wazuh", lambda *args: None)
     monkeypatch.setattr(provisioning, "start_wazuh", lambda *args, **kwargs: None)
     monkeypatch.setattr(provisioning, "wait_for_logtest", lambda *args: None)

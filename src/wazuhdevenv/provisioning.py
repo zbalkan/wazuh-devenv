@@ -604,6 +604,25 @@ def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
     )
 
 
+def configure_default_acls(runner: CommandRunner, workspace: Path) -> None:
+    if shutil.which("setfacl") is None:
+        LOG.info("setfacl not available; skipping optional default ACLs")
+        return
+
+    acl = "u:wazuh:rwx,g:wazuh:rwx,o::---"
+    for name in ("rules", "decoders"):
+        path = workspace / name
+        result = runner.run_as_user(
+            ["setfacl", "-d", "-m", acl, str(path)],
+            check=False,
+        )
+        if result.returncode != 0:
+            LOG.warning(
+                "Could not configure optional default ACLs on %s; continuing without them",
+                path,
+            )
+
+
 def configure_permissions(
     runner: CommandRunner,
     workspace: Path,
@@ -871,6 +890,7 @@ def initialize(
         configure_windows_rule_testing(runner)
         configure_bind_mounts(runner, workspace)
         configure_permissions(runner, workspace, user)
+        configure_default_acls(runner, workspace)
         validate_wazuh(runner)
         start_wazuh(runner)
         wait_for_logtest(runner)
