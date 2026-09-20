@@ -121,6 +121,35 @@ my-wazuh-rules/
 
 The workspace virtual environment belongs to the project. It is deliberately separate from the private environment used by `pipx` to run `wazuhdevenv`.
 
+## Run rule and decoder tests
+
+`wazuh-devenv` prepares the environment and managed test content. It does not provide a separate test runner; use pytest from the workspace virtual environment.
+
+Run your workspace tests:
+
+```bash
+.venv/bin/python -m pytest tests --wazuh-require-logtest
+```
+
+Run the managed Wazuh regression corpus:
+
+```bash
+.venv/bin/python -m pytest \
+  "${WAZUHDEVENV_HOME:-$HOME/.wazuhdevenv}/current-corpus/tests" \
+  --wazuh-require-logtest
+```
+
+Run both together:
+
+```bash
+.venv/bin/python -m pytest \
+  tests \
+  "${WAZUHDEVENV_HOME:-$HOME/.wazuhdevenv}/current-corpus/tests" \
+  --wazuh-require-logtest
+```
+
+These are ordinary pytest suites, so normal pytest selection, markers, fail-fast options, IDE integration, and plugins remain available without a `wazuh-devenv` wrapper.
+
 ## Managed state
 
 Tool-managed state defaults to:
