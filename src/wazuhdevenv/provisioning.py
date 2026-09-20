@@ -140,11 +140,19 @@ class PackageManager:
         else:
             raise UnsupportedPlatformError("supported package manager not found (APT, DNF, or YUM)")
 
+    def _trusted_query(self, executable: str) -> str:
+        resolved = self.runner.trusted_which(executable)
+        if not resolved:
+            raise UnsupportedPlatformError(
+                f"required package query command not found: {executable}"
+            )
+        return resolved
+
     def _apt_package_version(self, package: str) -> str | None:
         try:
             raw = self.runner.capture(
                 [
-                    "dpkg-query",
+                    self._trusted_query("dpkg-query"),
                     "-W",
                     "-f=${Status}\t${Version}\n",
                     package,
@@ -167,7 +175,13 @@ class PackageManager:
         else:
             try:
                 raw = self.runner.capture(
-                    ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "wazuh-manager"]
+                    [
+                        self._trusted_query("rpm"),
+                        "-q",
+                        "--qf",
+                        "%{VERSION}-%{RELEASE}",
+                        "wazuh-manager",
+                    ]
                 )
             except CommandError:
                 return None
@@ -203,7 +217,10 @@ class PackageManager:
         missing = [
             package
             for package in packages
-            if self.runner.run(["rpm", "-q", package], check=False).returncode != 0
+            if self.runner.run(
+                [self._trusted_query("rpm"), "-q", package],
+                check=False,
+            ).returncode != 0
         ]
 
         coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "rm", "stat", "test")
