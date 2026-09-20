@@ -318,12 +318,14 @@ def _remove_wazuh(
             ["apt-get", "remove", "--purge", "wazuh-manager", "-y"],
             privileged=True,
         )
-        return
+    else:
+        runner.run(
+            [package_manager.command, "-y", "remove", "wazuh-manager"],
+            privileged=True,
+        )
 
-    runner.run(
-        [package_manager.command, "-y", "remove", "wazuh-manager"],
-        privileged=True,
-    )
+    # Package managers may leave files created after installation, including
+    # wazuhdevenv backups. The whole tree is tool-owned when we installed Wazuh.
     runner.run(["rm", "-rf", str(WAZUH_HOME)], privileged=True)
 
 
