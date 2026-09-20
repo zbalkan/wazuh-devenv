@@ -463,6 +463,82 @@ def test_rpm_dependencies_install_coreutils_when_commands_are_missing(
     assert runner.installs == [["coreutils"]]
 
 
+def test_missing_fstab_is_created_with_first_bind_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingFstabRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert privileged is True
+            assert args == ["test", "-e", "/etc/fstab"]
+            return SimpleNamespace(returncode=1)
+
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            raise AssertionError(f"missing fstab must not be read: {args}, {privileged}")
+
+    written: list[tuple[Path, str]] = []
+    monkeypatch.setattr(
+        provisioning,
+        "_write_privileged",
+        lambda runner, path, content, **kwargs: written.append((path, content)),
+    )
+
+    provisioning._ensure_fstab(
+        MissingFstabRunner(),
+        Path("/workspace/rules"),
+        Path("/var/ossec/etc/rules"),
+    )
+
+    assert written == [
+        (
+            Path("/etc/fstab"),
+            "/workspace/rules /var/ossec/etc/rules none bind 0 0\n",
+        )
+    ]
+
+
+def test_rollback_removes_fstab_created_by_failed_init(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = RecordingRunner()
+    workspace = tmp_path / "workspace"
+    (workspace / "rules").mkdir(parents=True)
+    (workspace / "decoders").mkdir(parents=True)
+    restored: list[Path] = []
+
+    monkeypatch.setattr(provisioning, "_same_bind_mount", lambda *args: False)
+    monkeypatch.setattr(
+        provisioning,
+        "_restore_text_if_changed",
+        lambda runner, path, original: restored.append(path),
+    )
+    monkeypatch.setattr(provisioning, "stop_wazuh", lambda *args: None)
+
+    snapshot = ProvisioningSnapshot(
+        service_was_active=False,
+        service_was_enabled=None,
+        ossec_conf="original ossec",
+        windows_rules="original windows",
+        fstab=None,
+        preexisting_mounts=frozenset(),
+    )
+
+    provisioning._rollback_provisioning(runner, workspace, snapshot)
+
+    assert ["rm", "-f", "/etc/fstab"] in runner.commands
+    assert restored == [
+        provisioning.OSSEC_CONF,
+        provisioning.WINDOWS_RULES,
+    ]
+
+
 def test_group_membership_already_present_skips_usermod() -> None:
     class GroupRunner:
         def __init__(self) -> None:
