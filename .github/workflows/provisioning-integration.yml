@@ -1,6 +1,9 @@
 name: Wazuh provisioning integration
 
 on:
+  push:
+    branches: [main, master]
+  pull_request:
   workflow_dispatch:
     inputs:
       wazuh_version:
@@ -12,12 +15,15 @@ on:
 permissions:
   contents: read
 
+env:
+  WAZUHTESTER_SPEC: "wazuhtester==0.1.0rc1"
+  WAZUH_VERSION: ${{ inputs.wazuh_version || '4.14.7' }}
+
 jobs:
-  init-once:
+  ubuntu-full-install:
+    name: Ubuntu full install
     runs-on: ubuntu-latest
-    env:
-      WAZUHTESTER_SPEC: "wazuhtester==0.1.0rc1"
-      WAZUH_VERSION: ${{ inputs.wazuh_version }}
+    timeout-minutes: 30
 
     steps:
       - name: Configure temporary paths
@@ -84,3 +90,97 @@ jobs:
           sudo findmnt /var/ossec/etc/rules || true
           sudo findmnt /var/ossec/etc/decoders || true
           cat "$WAZUHDEVENV_HOME/state.json" || true
+
+  rocky-full-install:
+    name: Rocky Linux 10 full install
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start Rocky Linux systemd container
+        run: |
+          docker run --detach             --name wazuh-rocky             --privileged             --cgroupns=host             --env container=docker             --tmpfs /run             --tmpfs /run/lock             --volume /sys/fs/cgroup:/sys/fs/cgroup:rw             --volume "$GITHUB_WORKSPACE:/checkout:ro"             rockylinux:10             /sbin/init
+
+          for _ in {1..30}; do
+            state="$(docker exec wazuh-rocky systemctl is-system-running 2>/dev/null || true)"
+            if [[ "$state" == "running" || "$state" == "degraded" ]]; then
+              break
+            fi
+            sleep 1
+          done
+
+          docker exec wazuh-rocky systemctl daemon-reload
+
+      - name: Prepare Rocky Linux developer
+        run: |
+          docker exec wazuh-rocky dnf -y install python3 python3-pip sudo shadow-utils
+          docker exec wazuh-rocky useradd --create-home --shell /bin/bash developer
+          docker exec wazuh-rocky bash -c             'printf "%s\n" "developer ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/developer && chmod 0440 /etc/sudoers.d/developer'
+          docker exec wazuh-rocky cp -a /checkout /home/developer/wazuh-devenv
+          docker exec wazuh-rocky chown -R developer:developer /home/developer/wazuh-devenv
+
+      - name: Install wazuh-devenv
+        run: |
+          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuh-devenv             wazuh-rocky             python3 -m venv /home/developer/ci-venv
+
+          docker exec             --user developer             --env HOME=/home/developer             wazuh-rocky             /home/developer/ci-venv/bin/python -m pip install --upgrade pip
+
+          docker exec             --user developer             --env HOME=/home/developer             --workdir /home/developer/wazuh-devenv             wazuh-rocky             /home/developer/ci-venv/bin/python -m pip install -e .
+
+      - name: First init
+        run: |
+          docker exec             --user developer             --env HOME=/home/developer             --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state             --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"             --workdir /home/developer/wazuh-devenv             wazuh-rocky             /home/developer/ci-venv/bin/wazuhdevenv             init /home/developer/wazuh-workspace             --wazuh-version "$WAZUH_VERSION"             --skip-corpus
+
+      - name: Verify provisioned environment
+        run: |
+          docker exec wazuh-rocky systemctl is-active --quiet wazuh-manager
+          docker exec wazuh-rocky test -S /var/ossec/queue/sockets/logtest
+          docker exec wazuh-rocky test -f /home/developer/wazuh-workspace/.venv/pyvenv.cfg
+          docker exec wazuh-rocky test -d /home/developer/wazuh-workspace/rules
+          docker exec wazuh-rocky test -d /home/developer/wazuh-workspace/decoders
+          test "$(docker exec wazuh-rocky stat -c %U /home/developer/wazuh-workspace/rules)" = "developer"
+          test "$(docker exec wazuh-rocky stat -c %G /home/developer/wazuh-workspace/rules)" = "wazuh"
+          test "$(docker exec wazuh-rocky stat -c %U /home/developer/wazuh-workspace/decoders)" = "developer"
+          test "$(docker exec wazuh-rocky stat -c %G /home/developer/wazuh-workspace/decoders)" = "wazuh"
+          docker exec wazuh-rocky id -nG developer | tr ' ' '\n' | grep -Fxq wazuh
+          docker exec wazuh-rocky test -f /home/developer/wazuhdevenv-state/state.json
+          docker exec wazuh-rocky mountpoint -q /var/ossec/etc/rules
+          docker exec wazuh-rocky mountpoint -q /var/ossec/etc/decoders
+          docker exec             --user developer             wazuh-rocky             /home/developer/wazuh-workspace/.venv/bin/python             -c "import importlib.metadata as m; v=m.version('wazuhtester'); assert v == '0.1.0rc1', v; print(v)"
+
+      - name: Second init must fail fast
+        run: |
+          set +e
+          output="$(
+            docker exec               --user developer               --env HOME=/home/developer               --env WAZUHDEVENV_HOME=/home/developer/wazuhdevenv-state               --env WAZUHTESTER_SPEC="$WAZUHTESTER_SPEC"               --workdir /home/developer/wazuh-devenv               wazuh-rocky               /home/developer/ci-venv/bin/wazuhdevenv               init /home/developer/wazuh-workspace               --wazuh-version "$WAZUH_VERSION"               --skip-corpus 2>&1
+          )"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep -Fq "already initialized" <<<"$output"
+          grep -Fq "/home/developer/wazuh-workspace" <<<"$output"
+          grep -Fq "/home/developer/wazuhdevenv-state/state.json" <<<"$output"
+
+      - name: Verify environment after rejected second init
+        run: |
+          docker exec wazuh-rocky systemctl is-active --quiet wazuh-manager
+          docker exec wazuh-rocky test -S /var/ossec/queue/sockets/logtest
+          docker exec wazuh-rocky mountpoint -q /var/ossec/etc/rules
+          docker exec wazuh-rocky mountpoint -q /var/ossec/etc/decoders
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a || true
+          docker exec wazuh-rocky systemctl status wazuh-manager --no-pager || true
+          docker exec wazuh-rocky journalctl -u wazuh-manager --no-pager -n 150 || true
+          docker exec wazuh-rocky findmnt /var/ossec/etc/rules || true
+          docker exec wazuh-rocky findmnt /var/ossec/etc/decoders || true
+          docker exec wazuh-rocky cat /home/developer/wazuhdevenv-state/state.json || true
+
+      - name: Remove Rocky Linux container
+        if: always()
+        run: docker rm --force wazuh-rocky || true
