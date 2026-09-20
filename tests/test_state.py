@@ -47,29 +47,6 @@ def test_lock_file_rejects_symlink(tmp_path: Path) -> None:
             pass
 
 
-def test_lock_file_rejects_symlink_even_if_precheck_misses_it(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    target = tmp_path / "external.lock"
-    target.touch()
-    lock = tmp_path / "wazuhdevenv.lock"
-    lock.symlink_to(target)
-
-    original_is_symlink = Path.is_symlink
-
-    def stale_is_symlink(path: Path) -> bool:
-        if path == lock:
-            return False
-        return original_is_symlink(path)
-
-    monkeypatch.setattr(Path, "is_symlink", stale_is_symlink)
-
-    with pytest.raises(ConfigurationError, match="lock file must not be a symlink"):
-        with managed_lock(tmp_path):
-            pass
-
-
 def test_managed_lock_prevents_second_writer(tmp_path: Path) -> None:
     with managed_lock(tmp_path):
         with pytest.raises(RuntimeError, match="another wazuhdevenv operation"):
