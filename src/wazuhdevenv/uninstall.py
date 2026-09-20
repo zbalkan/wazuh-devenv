@@ -168,12 +168,23 @@ def _remove_mounts(
     preexisting: set[Path],
 ) -> list[str]:
     removed: list[str] = []
-    for name in reversed(("rules", "decoders")):
+    for name in ("rules", "decoders"):
         target = WAZUH_HOME / "etc" / name
         if target in preexisting:
             continue
         if _same_bind_mount(runner, (workspace / name).resolve(), target):
             runner.run(["umount", str(target)], privileged=True)
+            if (
+                runner.run(
+                    ["mountpoint", "-q", str(target)],
+                    privileged=True,
+                    check=False,
+                ).returncode
+                == 0
+            ):
+                raise ConfigurationError(
+                    f"failed to unmount {target}; refusing to continue uninstall"
+                )
             removed.append(f"bind mount: {target}")
     return removed
 
@@ -219,6 +230,89 @@ def _remove_fstab_entries(
     if removed:
         _rewrite_preserving_metadata(runner, path, "".join(output))
     return removed
+
+
+def _detach_workspace(
+    runner: CommandRunner,
+    workspace: Path,
+    preexisting_mounts: set[Path],
+    preexisting_fstab: set[Path],
+) -> list[str]:
+    stop_wazuh(runner)
+    removed = _remove_mounts(runner, workspace, preexisting_mounts)
+    removed.extend(
+        _remove_fstab_entries(runner, workspace, preexisting_fstab)
+    )
+    return removed
+
+
+def _prepare_package_directories(runner: CommandRunner) -> None:
+    for name in ("rules", "decoders"):
+        target = WAZUH_HOME / "etc" / name
+        if (
+            runner.run(
+                ["mountpoint", "-q", str(target)],
+                privileged=True,
+                check=False,
+            ).returncode
+            == 0
+        ):
+            raise ConfigurationError(
+                f"{target} is still mounted; refusing to prepare package removal"
+            )
+        if (
+            runner.run(
+                ["test", "-L", str(target)],
+                privileged=True,
+                check=False,
+            ).returncode
+            == 0
+        ):
+            raise ConfigurationError(
+                f"{target} is a symlink; refusing to prepare package removal"
+            )
+        exists = (
+            runner.run(
+                ["test", "-e", str(target)],
+                privileged=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+        if exists:
+            if (
+                runner.run(
+                    ["test", "-d", str(target)],
+                    privileged=True,
+                    check=False,
+                ).returncode
+                != 0
+            ):
+                raise ConfigurationError(
+                    f"{target} is not a directory; refusing to prepare package removal"
+                )
+            runner.run(
+                [
+                    "find",
+                    str(target),
+                    "-mindepth",
+                    "1",
+                    "-maxdepth",
+                    "1",
+                    "-exec",
+                    "rm",
+                    "-rf",
+                    "--",
+                    "{}",
+                    "+",
+                ],
+                privileged=True,
+            )
+        else:
+            runner.run(["mkdir", "-p", str(target)], privileged=True)
+
+        runner.run(["chown", "root:wazuh", str(target)], privileged=True)
+        runner.run(["chmod", "0770", str(target)], privileged=True)
 
 
 def _preflight_restore(
@@ -323,6 +417,7 @@ def _remove_wazuh(
 ) -> bool:
     package_present = package_manager.installed_version() is not None
     if package_present:
+        _prepare_package_directories(runner)
         if package_manager.family == "apt":
             runner.run(
                 ["apt-get", "remove", "--purge", "wazuh-manager", "-y"],
@@ -565,10 +660,13 @@ def uninstall_environment(home: Path, user: InvokingUser) -> UninstallResult:
         service_was_enabled = enabled_value
 
     removed.extend(
-        _remove_fstab_entries(runner, workspace, preexisting_fstab)
+        _detach_workspace(
+            runner,
+            workspace,
+            preexisting_mounts,
+            preexisting_fstab,
+        )
     )
-    stop_wazuh(runner)
-    removed.extend(_remove_mounts(runner, workspace, preexisting_mounts))
     workspace_access_removed = _cleanup_workspace_access(
         runner, workspace, user
     )

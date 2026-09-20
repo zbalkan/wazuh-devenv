@@ -171,8 +171,8 @@ def _coverage_command(home: Path) -> int:
 def _uninstall_command(user: InvokingUser, home: Path) -> int:
     with managed_lock(home):
         result = uninstall_environment(home, user)
+        shutil.rmtree(home)
 
-    shutil.rmtree(home)
     print(format_uninstall_report(result, home))
     return 0
 

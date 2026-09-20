@@ -295,11 +295,17 @@ def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
     workspace = tmp_path / "workspace"
     lock_calls: list[Path] = []
     removed: list[Path] = []
+    lock_active = False
 
     @contextmanager
     def fake_lock(path: Path):
+        nonlocal lock_active
         lock_calls.append(path)
-        yield
+        lock_active = True
+        try:
+            yield
+        finally:
+            lock_active = False
 
     monkeypatch.setattr(cli, "managed_lock", fake_lock)
     result = UninstallResult(
@@ -318,7 +324,12 @@ def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
             else None
         ),
     )
-    monkeypatch.setattr(cli.shutil, "rmtree", lambda path: removed.append(path))
+
+    def remove_state(path: Path) -> None:
+        assert lock_active is True
+        removed.append(path)
+
+    monkeypatch.setattr(cli.shutil, "rmtree", remove_state)
 
     assert cli._uninstall_command(user, home) == 0
     assert lock_calls == [home]

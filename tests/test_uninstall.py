@@ -57,6 +57,173 @@ def test_required_state_reads_uninstall_provenance(tmp_path: Path) -> None:
     assert legacy is False
 
 
+def test_remove_mounts_unmounts_and_verifies_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    events: list[list[str]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert privileged is True
+            events.append(args)
+            return type(
+                "Result",
+                (),
+                {"returncode": 1 if args[0] == "mountpoint" else 0},
+            )()
+
+    monkeypatch.setattr(uninstall, "_same_bind_mount", lambda *args: True)
+
+    removed = uninstall._remove_mounts(FakeRunner(), workspace, set())
+
+    assert events == [
+        ["umount", "/var/ossec/etc/rules"],
+        ["mountpoint", "-q", "/var/ossec/etc/rules"],
+        ["umount", "/var/ossec/etc/decoders"],
+        ["mountpoint", "-q", "/var/ossec/etc/decoders"],
+    ]
+    assert removed == [
+        "bind mount: /var/ossec/etc/rules",
+        "bind mount: /var/ossec/etc/decoders",
+    ]
+
+
+def test_remove_mounts_refuses_to_continue_if_target_remains_mounted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            del check
+            assert privileged is True
+            return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(uninstall, "_same_bind_mount", lambda *args: True)
+
+    with pytest.raises(
+        ConfigurationError,
+        match="failed to unmount /var/ossec/etc/rules",
+    ):
+        uninstall._remove_mounts(FakeRunner(), workspace, set())
+
+
+def test_prepare_package_directories_empties_and_restores_metadata() -> None:
+    commands: list[tuple[list[str], bool]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert privileged is True
+            commands.append((args, check))
+            if args[0] == "mountpoint":
+                return type("Result", (), {"returncode": 1})()
+            if args[:2] == ["test", "-L"]:
+                return type("Result", (), {"returncode": 1})()
+            return type("Result", (), {"returncode": 0})()
+
+    uninstall._prepare_package_directories(FakeRunner())
+
+    for target in (
+        "/var/ossec/etc/rules",
+        "/var/ossec/etc/decoders",
+    ):
+        assert (["mountpoint", "-q", target], False) in commands
+        assert (["test", "-L", target], False) in commands
+        assert (["test", "-e", target], False) in commands
+        assert (["test", "-d", target], False) in commands
+        assert (
+            [
+                "find",
+                target,
+                "-mindepth",
+                "1",
+                "-maxdepth",
+                "1",
+                "-exec",
+                "rm",
+                "-rf",
+                "--",
+                "{}",
+                "+",
+            ],
+            True,
+        ) in commands
+        assert (["chown", "root:wazuh", target], True) in commands
+        assert (["chmod", "0770", target], True) in commands
+        assert (["rm", "-rf", "--", target], True) not in commands
+
+
+def test_prepare_package_directories_creates_missing_target() -> None:
+    commands: list[tuple[list[str], bool]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert privileged is True
+            commands.append((args, check))
+            if args[0] == "mountpoint" or args[:2] == ["test", "-L"]:
+                return type("Result", (), {"returncode": 1})()
+            if args[:2] == ["test", "-e"]:
+                return type("Result", (), {"returncode": 1})()
+            return type("Result", (), {"returncode": 0})()
+
+    uninstall._prepare_package_directories(FakeRunner())
+
+    for target in (
+        "/var/ossec/etc/rules",
+        "/var/ossec/etc/decoders",
+    ):
+        assert (["mkdir", "-p", target], True) in commands
+        assert (["chown", "root:wazuh", target], True) in commands
+        assert (["chmod", "0770", target], True) in commands
+
+
+def test_prepare_package_directories_refuses_mounted_target() -> None:
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            del args, check
+            assert privileged is True
+            return type("Result", (), {"returncode": 0})()
+
+    with pytest.raises(
+        ConfigurationError,
+        match="/var/ossec/etc/rules is still mounted",
+    ):
+        uninstall._prepare_package_directories(FakeRunner())
+
+
 def test_remove_fstab_entries_preserves_unrelated_content(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -111,6 +278,40 @@ def test_remove_fstab_entries_refuses_changed_target(
 
 
 
+def test_detach_workspace_stops_before_mount_and_fstab_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    stages: list[str] = []
+
+    monkeypatch.setattr(
+        uninstall,
+        "stop_wazuh",
+        lambda runner: stages.append("stop"),
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_remove_mounts",
+        lambda *args: stages.append("mounts") or ["mounts removed"],
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_remove_fstab_entries",
+        lambda *args: stages.append("fstab") or ["fstab removed"],
+    )
+
+    removed = uninstall._detach_workspace(
+        object(),
+        workspace,
+        set(),
+        set(),
+    )
+
+    assert stages == ["stop", "mounts", "fstab"]
+    assert removed == ["mounts removed", "fstab removed"]
+
+
 def test_preflight_wazuh_version_rejects_changed_installation() -> None:
     class FakePackageManager:
         def installed_version(self) -> str:
@@ -163,6 +364,45 @@ def test_restore_service_restarts_with_recorded_enablement(
     )
 
     assert events == [("start", False), "ready"]
+
+
+def test_remove_wazuh_recreates_directories_before_package_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stages: list[object] = []
+
+    class FakePackageManager:
+        family = "rpm"
+        command = "dnf"
+
+        def installed_version(self) -> str:
+            return "4.14.8"
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            del check
+            assert privileged is True
+            stages.append(args)
+            return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(
+        uninstall,
+        "_prepare_package_directories",
+        lambda runner: stages.append("directories"),
+    )
+
+    assert uninstall._remove_wazuh(FakeRunner(), FakePackageManager()) is True
+    assert stages == [
+        "directories",
+        ["dnf", "-y", "remove", "wazuh-manager"],
+        ["rm", "-rf", "/var/ossec"],
+    ]
 
 
 def test_remove_group_membership_is_idempotent() -> None:
