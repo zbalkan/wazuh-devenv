@@ -329,7 +329,7 @@ def test_prepare_package_directories_refuses_nested_mount_before_mutation() -> N
     )
 
 
-def test_remove_fstab_entries_preserves_unrelated_content(
+def test_remove_fstab_entries_preserves_unrelated_content_and_reloads_systemd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -342,7 +342,59 @@ def test_remove_fstab_entries_preserves_unrelated_content(
         f"{decoders} /var/ossec/etc/decoders none bind 0 0\n"
         "# keep this comment\n"
     )
+    expected = (
+        "UUID=root / ext4 defaults 0 1\n"
+        "# keep this comment\n"
+    )
+    current = original
     writes: list[str] = []
+    commands: list[list[str]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            del check
+            assert privileged is True
+            commands.append(args)
+            return type("Result", (), {"returncode": 0})()
+
+    def read_fstab(runner: object, path: Path) -> str:
+        del runner, path
+        return current
+
+    def rewrite_fstab(runner: object, path: Path, text: str) -> None:
+        nonlocal current
+        del runner, path
+        current = text
+        writes.append(text)
+
+    monkeypatch.setattr(uninstall, "_read_optional_privileged", read_fstab)
+    monkeypatch.setattr(uninstall, "_rewrite_preserving_metadata", rewrite_fstab)
+    monkeypatch.setattr(uninstall, "_service_manager", lambda: "systemd")
+
+    removed = uninstall._remove_fstab_entries(FakeRunner(), workspace, set())
+
+    assert removed == [
+        "/etc/fstab entry for /var/ossec/etc/rules",
+        "/etc/fstab entry for /var/ossec/etc/decoders",
+    ]
+    assert writes == [expected]
+    assert current == expected
+    assert commands == [["systemctl", "daemon-reload"]]
+
+
+def test_remove_fstab_entries_refuses_if_rewrite_does_not_persist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    rules = (workspace / "rules").resolve()
+    original = f"{rules} /var/ossec/etc/rules none bind 0 0\n"
 
     monkeypatch.setattr(
         uninstall,
@@ -352,15 +404,14 @@ def test_remove_fstab_entries_preserves_unrelated_content(
     monkeypatch.setattr(
         uninstall,
         "_rewrite_preserving_metadata",
-        lambda runner, path, text: writes.append(text),
+        lambda runner, path, text: None,
     )
 
-    uninstall._remove_fstab_entries(object(), workspace, set())
-
-    assert writes == [
-        "UUID=root / ext4 defaults 0 1\n"
-        "# keep this comment\n"
-    ]
+    with pytest.raises(
+        ConfigurationError,
+        match="failed to remove managed /etc/fstab entries",
+    ):
+        uninstall._remove_fstab_entries(object(), workspace, set())
 
 
 def test_remove_fstab_entries_refuses_changed_target(

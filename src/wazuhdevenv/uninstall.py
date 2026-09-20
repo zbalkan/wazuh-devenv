@@ -23,6 +23,7 @@ from .provisioning import (
     _render_windows_rule_testing,
     _rewrite_preserving_metadata,
     _same_bind_mount,
+    _service_manager,
     _write_privileged,
     is_wazuh_active,
     is_wazuh_enabled,
@@ -258,6 +259,21 @@ def _remove_fstab_entries(
     )
     if text is not None and removed:
         _rewrite_preserving_metadata(runner, path, updated)
+        _, _, _, remaining = _fstab_cleanup_plan(
+            runner,
+            workspace,
+            preexisting,
+        )
+        if remaining:
+            raise ConfigurationError(
+                "failed to remove managed /etc/fstab entries: "
+                + ", ".join(remaining)
+            )
+        if _service_manager() == "systemd":
+            runner.run(
+                ["systemctl", "daemon-reload"],
+                privileged=True,
+            )
     return removed
 
 
