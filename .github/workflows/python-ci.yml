@@ -2,7 +2,7 @@ name: Python CLI CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/uninstall-cleanup]
   pull_request:
   workflow_dispatch:
 

@@ -10,6 +10,7 @@ import pytest
 import wazuhdevenv.cli as cli
 from wazuhdevenv.corpus import CorpusRelease
 from wazuhdevenv.paths import InvokingUser
+from wazuhdevenv.uninstall import UninstallResult
 
 
 def _user(tmp_path: Path) -> InvokingUser:
@@ -280,3 +281,59 @@ def test_coverage_command_requires_initialized_workspace(tmp_path: Path) -> None
 
     with pytest.raises(cli.WazuhDevenvError, match="workspace is not initialized"):
         cli._coverage_command(home)
+
+
+
+def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    user = _user(tmp_path)
+    home = tmp_path / "managed"
+    home.mkdir()
+    workspace = tmp_path / "workspace"
+    lock_calls: list[Path] = []
+    removed: list[Path] = []
+
+    @contextmanager
+    def fake_lock(path: Path):
+        lock_calls.append(path)
+        yield
+
+    monkeypatch.setattr(cli, "managed_lock", fake_lock)
+    result = UninstallResult(
+        workspace=workspace,
+        removed=("bind mount: /var/ossec/etc/rules",),
+        restored=(),
+        preserved=(f"user workspace content: {workspace / 'rules'}",),
+        remnants=("wazuhdevenv CLI remains installed",),
+    )
+    monkeypatch.setattr(
+        cli,
+        "uninstall_environment",
+        lambda path, invoking_user: (
+            result
+            if path == home and invoking_user == user
+            else None
+        ),
+    )
+    monkeypatch.setattr(cli.shutil, "rmtree", lambda path: removed.append(path))
+
+    assert cli._uninstall_command(user, home) == 0
+    assert lock_calls == [home]
+    assert removed == [home]
+
+    output = capsys.readouterr().out
+    assert "Uninstall complete." in output
+    assert "Removed:" in output
+    assert "Preserved:" in output
+    assert "Remnants:" in output
+    assert f"managed state: {home}" in output
+    assert "wazuhdevenv CLI remains installed" in output
+
+
+def test_parser_exposes_uninstall_command() -> None:
+    args = cli._parser().parse_args(["uninstall"])
+
+    assert args.command == "uninstall"

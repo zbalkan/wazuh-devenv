@@ -605,7 +605,7 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     installed: list[list[str]] = []
     manager._apt_install = lambda packages: installed.append(packages)  # type: ignore[method-assign]
 
-    manager.ensure_system_dependencies()
+    assert manager.ensure_system_dependencies() == ["python3-venv"]
 
     assert installed == [["python3-venv"]]
 
@@ -798,7 +798,7 @@ def test_group_membership_already_present_skips_usermod() -> None:
     runner = GroupRunner()
     user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
 
-    provisioning.ensure_group_membership(runner, user)
+    assert provisioning.ensure_group_membership(runner, user) is False
 
     assert runner.commands == []
 
@@ -822,7 +822,7 @@ def test_group_membership_is_added_and_verified() -> None:
     runner = GroupRunner()
     user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
 
-    provisioning.ensure_group_membership(runner, user)
+    assert provisioning.ensure_group_membership(runner, user) is True
 
     assert runner.commands == [["usermod", "-a", "-G", "wazuh", "tester"]]
     assert runner.capture_calls == 2

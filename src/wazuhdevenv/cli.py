@@ -6,6 +6,7 @@ import argparse
 import errno
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .paths import InvokingUser, managed_home, resolve_workspace
 from .provisioning import PackageManager, initialize
 from .runner import CommandRunner
 from .state import ensure_managed_home, load_state, managed_lock
+from .uninstall import format_uninstall_report, uninstall_environment
 
 LOG = logging.getLogger("wazuhdevenv")
 
@@ -46,6 +48,11 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "coverage",
         help="Report custom rule coverage from workspace tests",
+    )
+
+    commands.add_parser(
+        "uninstall",
+        help="Remove the managed development environment",
     )
 
     return parser
@@ -161,6 +168,15 @@ def _coverage_command(home: Path) -> int:
     return 0
 
 
+def _uninstall_command(user: InvokingUser, home: Path) -> int:
+    with managed_lock(home):
+        result = uninstall_environment(home, user)
+
+    shutil.rmtree(home)
+    print(format_uninstall_report(result, home))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     logging_ready = False
@@ -183,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
             return _update_command(args, user, home)
         if args.command == "coverage":
             return _coverage_command(home)
+        if args.command == "uninstall":
+            return _uninstall_command(user, home)
     except (WazuhDevenvError, ValueError, OSError, RuntimeError) as exc:
         if logging_ready:
             LOG.error("%s", exc)
