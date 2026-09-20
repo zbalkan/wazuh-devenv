@@ -196,15 +196,15 @@ def _remove_mounts(
     return removed
 
 
-def _remove_fstab_entries(
+def _fstab_cleanup_plan(
     runner: CommandRunner,
     workspace: Path,
     preexisting: set[Path],
-) -> list[str]:
+) -> tuple[Path, str | None, str, list[str]]:
     path = Path("/etc/fstab")
     text = _read_optional_privileged(runner, path)
     if text is None:
-        return []
+        return path, None, "", []
 
     expected = {
         WAZUH_HOME / "etc" / name: (
@@ -218,25 +218,74 @@ def _remove_fstab_entries(
     output: list[str] = []
     removed: list[str] = []
     for raw in text.splitlines(keepends=True):
-        line = raw.strip()
-        fields = line.split()
+        exact_line = raw.rstrip("\r\n")
+        parsed_line = exact_line.strip()
+        fields = parsed_line.split()
         target = (
             Path(fields[1])
-            if len(fields) >= 2 and not line.startswith("#")
+            if len(fields) >= 2 and not parsed_line.startswith("#")
             else None
         )
         if target not in expected:
             output.append(raw)
             continue
-        if line != expected[target]:
+        if exact_line != expected[target]:
             raise ConfigurationError(
                 f"fstab entry for {target} changed since initialization"
             )
         removed.append(f"/etc/fstab entry for {target}")
 
-    if removed:
-        _rewrite_preserving_metadata(runner, path, "".join(output))
+    return path, text, "".join(output), removed
+
+
+def _preflight_fstab_entries(
+    runner: CommandRunner,
+    workspace: Path,
+    preexisting: set[Path],
+) -> None:
+    _fstab_cleanup_plan(runner, workspace, preexisting)
+
+
+def _remove_fstab_entries(
+    runner: CommandRunner,
+    workspace: Path,
+    preexisting: set[Path],
+) -> list[str]:
+    path, text, updated, removed = _fstab_cleanup_plan(
+        runner,
+        workspace,
+        preexisting,
+    )
+    if text is not None and removed:
+        _rewrite_preserving_metadata(runner, path, updated)
     return removed
+
+
+def _preflight_retained_mounts(
+    runner: CommandRunner,
+    preexisting_mounts: set[Path],
+    *,
+    removing_wazuh: bool,
+) -> None:
+    if not removing_wazuh:
+        return
+
+    active = [
+        target
+        for target in sorted(preexisting_mounts)
+        if runner.run(
+            ["mountpoint", "-q", str(target)],
+            privileged=True,
+            check=False,
+        ).returncode
+        == 0
+    ]
+    if active:
+        raise ConfigurationError(
+            "cannot remove tool-installed Wazuh while preserving pre-existing "
+            "bind mounts; unmount them before retrying uninstall: "
+            + ", ".join(str(target) for target in active)
+        )
 
 
 def _detach_workspace(
@@ -244,7 +293,15 @@ def _detach_workspace(
     workspace: Path,
     preexisting_mounts: set[Path],
     preexisting_fstab: set[Path],
+    *,
+    removing_wazuh: bool,
 ) -> list[str]:
+    _preflight_retained_mounts(
+        runner,
+        preexisting_mounts,
+        removing_wazuh=removing_wazuh,
+    )
+    _preflight_fstab_entries(runner, workspace, preexisting_fstab)
     stop_wazuh(runner)
     removed = _remove_mounts(runner, workspace, preexisting_mounts)
     removed.extend(
@@ -672,6 +729,7 @@ def uninstall_environment(home: Path, user: InvokingUser) -> UninstallResult:
             workspace,
             preexisting_mounts,
             preexisting_fstab,
+            removing_wazuh=installed_by_tool,
         )
     )
     workspace_access_removed = _cleanup_workspace_access(

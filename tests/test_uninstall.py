@@ -73,6 +73,10 @@ def test_remove_mounts_unmounts_and_verifies_targets(
             check: bool = True,
         ):
             assert privileged is True
+            if args[0] == "mountpoint":
+                assert check is False
+            elif args[0] == "umount":
+                assert check is True
             events.append(args)
             return type(
                 "Result",
@@ -277,14 +281,42 @@ def test_remove_fstab_entries_refuses_changed_target(
         uninstall._remove_fstab_entries(object(), workspace, set())
 
 
+def test_remove_fstab_entries_refuses_whitespace_changed_managed_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    rules = (workspace / "rules").resolve()
+    original = f"  {rules} /var/ossec/etc/rules none bind 0 0\n"
 
-def test_detach_workspace_stops_before_mount_and_fstab_cleanup(
+    monkeypatch.setattr(
+        uninstall,
+        "_read_optional_privileged",
+        lambda runner, path: original,
+    )
+
+    with pytest.raises(ConfigurationError, match="changed since initialization"):
+        uninstall._remove_fstab_entries(object(), workspace, set())
+
+
+
+def test_detach_workspace_validates_fstab_before_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
     stages: list[str] = []
 
+    monkeypatch.setattr(
+        uninstall,
+        "_preflight_retained_mounts",
+        lambda *args, **kwargs: stages.append("mount-preflight"),
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_preflight_fstab_entries",
+        lambda *args: stages.append("fstab-preflight"),
+    )
     monkeypatch.setattr(
         uninstall,
         "stop_wazuh",
@@ -306,10 +338,111 @@ def test_detach_workspace_stops_before_mount_and_fstab_cleanup(
         workspace,
         set(),
         set(),
+        removing_wazuh=False,
     )
 
-    assert stages == ["stop", "mounts", "fstab"]
+    assert stages == [
+        "mount-preflight",
+        "fstab-preflight",
+        "stop",
+        "mounts",
+        "fstab",
+    ]
     assert removed == ["mounts removed", "fstab removed"]
+
+
+def test_detach_workspace_changed_fstab_fails_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    mutations: list[str] = []
+
+    monkeypatch.setattr(
+        uninstall,
+        "_preflight_retained_mounts",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_preflight_fstab_entries",
+        lambda *args: (_ for _ in ()).throw(
+            ConfigurationError("fstab entry changed")
+        ),
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "stop_wazuh",
+        lambda runner: mutations.append("stop"),
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_remove_mounts",
+        lambda *args: mutations.append("mounts") or [],
+    )
+
+    with pytest.raises(ConfigurationError, match="fstab entry changed"):
+        uninstall._detach_workspace(
+            object(),
+            workspace,
+            set(),
+            set(),
+            removing_wazuh=False,
+        )
+
+    assert mutations == []
+
+
+def test_detach_workspace_rejects_retained_mount_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    retained = Path("/var/ossec/etc/rules")
+    mutations: list[str] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert args == ["mountpoint", "-q", str(retained)]
+            assert privileged is True
+            assert check is False
+            return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(
+        uninstall,
+        "stop_wazuh",
+        lambda runner: mutations.append("stop"),
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_remove_mounts",
+        lambda *args: mutations.append("mounts") or [],
+    )
+    monkeypatch.setattr(
+        uninstall,
+        "_preflight_fstab_entries",
+        lambda *args: mutations.append("fstab-preflight"),
+    )
+
+    with pytest.raises(
+        ConfigurationError,
+        match="cannot remove tool-installed Wazuh",
+    ):
+        uninstall._detach_workspace(
+            FakeRunner(),
+            workspace,
+            {retained},
+            set(),
+            removing_wazuh=True,
+        )
+
+    assert mutations == []
 
 
 def test_preflight_wazuh_version_rejects_changed_installation() -> None:
