@@ -31,7 +31,7 @@ from .provisioning import (
     wait_for_logtest,
 )
 from .runner import CommandRunner
-from .state import load_state
+from .state import load_state, managed_lock_path
 
 LOG = logging.getLogger(__name__)
 
@@ -58,7 +58,14 @@ def format_uninstall_report(result: UninstallResult, managed_home: Path) -> str:
         ("Removed", (*result.removed, f"managed state: {managed_home}")),
         ("Restored", result.restored),
         ("Preserved", result.preserved),
-        ("Remnants", result.remnants),
+        (
+            "Remnants",
+            (
+                *result.remnants,
+                "persistent operation lock retained for serialization: "
+                f"{managed_lock_path(managed_home)}",
+            ),
+        ),
     )
     lines = ["Uninstall complete."]
     for title, entries in sections:

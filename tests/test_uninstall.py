@@ -460,6 +460,8 @@ def test_format_uninstall_report_lists_remnants_explicitly(tmp_path: Path) -> No
     assert "Remnants:" in report
     assert f"managed state: {managed_home}" in report
     assert "system prerequisite packages retained: util-linux" in report
+    assert "persistent operation lock retained for serialization" in report
+    assert str(managed_home.with_name(f"{managed_home.name}.lock")) in report
 
 
 def test_strings_rejects_malformed_dependency_provenance() -> None:

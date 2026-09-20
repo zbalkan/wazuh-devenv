@@ -18,7 +18,7 @@ def _user(tmp_path: Path) -> InvokingUser:
 
 
 @pytest.mark.parametrize("check", [False, True])
-def test_update_command_uses_managed_lock_with_home_only(
+def test_update_command_resolves_and_updates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     check: bool,
@@ -26,12 +26,6 @@ def test_update_command_uses_managed_lock_with_home_only(
     user = _user(tmp_path)
     home = tmp_path / "managed"
     home.mkdir()
-    lock_calls: list[Path] = []
-
-    @contextmanager
-    def fake_lock(path: Path):
-        lock_calls.append(path)
-        yield
 
     release = CorpusRelease(
         manifest={
@@ -46,7 +40,6 @@ def test_update_command_uses_managed_lock_with_home_only(
     resolve_calls: list[tuple[str, str]] = []
     update_calls: list[tuple[Path, str, str]] = []
 
-    monkeypatch.setattr(cli, "managed_lock", fake_lock)
     monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.8")
     monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
     monkeypatch.setattr(
@@ -63,7 +56,6 @@ def test_update_command_uses_managed_lock_with_home_only(
     )
 
     assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
-    assert lock_calls == [home]
     if check:
         assert resolve_calls == [("4.14.8", "0.1.0rc1")]
         assert update_calls == []
@@ -218,12 +210,6 @@ def test_init_propagates_corpus_failure(
     home = tmp_path / "managed"
     home.mkdir()
 
-    @contextmanager
-    def fake_lock(path: Path):
-        assert path == home
-        yield
-
-    monkeypatch.setattr(cli, "managed_lock", fake_lock)
     monkeypatch.setattr(cli, "resolve_workspace", lambda value: tmp_path / "workspace")
     monkeypatch.setattr(cli, "initialize", lambda *args, **kwargs: "4.14.8")
     monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
@@ -284,7 +270,7 @@ def test_coverage_command_requires_initialized_workspace(tmp_path: Path) -> None
 
 
 
-def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
+def test_uninstall_command_removes_state_and_reports_remnants(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -293,21 +279,7 @@ def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
     home = tmp_path / "managed"
     home.mkdir()
     workspace = tmp_path / "workspace"
-    lock_calls: list[Path] = []
     removed: list[Path] = []
-    lock_active = False
-
-    @contextmanager
-    def fake_lock(path: Path):
-        nonlocal lock_active
-        lock_calls.append(path)
-        lock_active = True
-        try:
-            yield
-        finally:
-            lock_active = False
-
-    monkeypatch.setattr(cli, "managed_lock", fake_lock)
     result = UninstallResult(
         workspace=workspace,
         removed=("bind mount: /var/ossec/etc/rules",),
@@ -326,13 +298,11 @@ def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
     )
 
     def remove_state(path: Path) -> None:
-        assert lock_active is True
         removed.append(path)
 
     monkeypatch.setattr(cli.shutil, "rmtree", remove_state)
 
     assert cli._uninstall_command(user, home) == 0
-    assert lock_calls == [home]
     assert removed == [home]
 
     output = capsys.readouterr().out
@@ -342,6 +312,67 @@ def test_uninstall_command_uses_lock_removes_state_and_reports_remnants(
     assert "Remnants:" in output
     assert f"managed state: {home}" in output
     assert "wazuhdevenv CLI remains installed" in output
+
+
+def test_main_holds_lock_through_uninstall_deletion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _user(tmp_path)
+    home = tmp_path / "managed"
+    workspace = tmp_path / "workspace"
+    events: list[str] = []
+
+    @contextmanager
+    def fake_lock(path: Path):
+        assert path == home
+        events.append("lock-enter")
+        yield
+        events.append("lock-exit")
+
+    result = UninstallResult(
+        workspace=workspace,
+        removed=(),
+        restored=(),
+        preserved=(),
+        remnants=(),
+    )
+
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(cli.InvokingUser, "current", classmethod(lambda cls: user))
+    monkeypatch.setattr(cli, "managed_home", lambda invoking_user: home)
+    monkeypatch.setattr(cli, "managed_lock", fake_lock)
+    monkeypatch.setattr(
+        cli,
+        "ensure_managed_home",
+        lambda path: events.append("ensure-home"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_configure_logging",
+        lambda path, verbose: events.append("logging"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "uninstall_environment",
+        lambda path, invoking_user: events.append("uninstall") or result,
+    )
+    monkeypatch.setattr(
+        cli.shutil,
+        "rmtree",
+        lambda path: events.append("delete-home"),
+    )
+    monkeypatch.setattr(cli, "format_uninstall_report", lambda *args: "done")
+
+    assert cli.main(["uninstall"]) == 0
+    assert events == [
+        "lock-enter",
+        "ensure-home",
+        "logging",
+        "uninstall",
+        "delete-home",
+        "lock-exit",
+    ]
 
 
 def test_parser_exposes_uninstall_command() -> None:

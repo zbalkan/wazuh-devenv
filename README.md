@@ -275,7 +275,9 @@ the command does not claim to return the host to an unknowable pristine state.
 
 Known intentional remnants include the `wazuhdevenv` Python or pipx
 installation itself, which must be removed using the installer that installed
-the CLI. System prerequisite packages installed during provisioning are also
+the CLI. A small sibling lock file is also retained outside the managed state
+directory so concurrent commands remain serialized while that directory is
+deleted. System prerequisite packages installed during provisioning are also
 retained because they may have acquired other consumers; current state records
 the exact package names so uninstall can report them. Package-manager cache and
 metadata changes made by APT, DNF, or YUM are not rolled back.
