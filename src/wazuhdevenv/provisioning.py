@@ -674,10 +674,10 @@ def configure_bind_mounts(
         _ensure_fstab(runner, source, target)
 
 
-def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
+def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> bool:
     groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" in groups:
-        return
+        return False
     runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
     groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
     if "wazuh" not in groups:
@@ -689,6 +689,7 @@ def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
         "Wazuh tools without sudo.",
         user.name,
     )
+    return True
 
 
 def configure_default_acls(runner: CommandRunner, workspace: Path) -> None:
@@ -965,7 +966,22 @@ def initialize(
     package_manager.ensure_system_dependencies()
     _service_manager()
     prepare_workspace(workspace, user)
+
+    workspace_venv_created_by_tool = not (workspace / ".venv/pyvenv.cfg").is_file()
     ensure_workspace_venv(runner, workspace)
+
+    wazuh_installed_by_tool = package_manager.installed_version() is None
+    repository_path = (
+        Path("/etc/apt/sources.list.d/wazuh.list")
+        if package_manager.family == "apt"
+        else Path("/etc/yum.repos.d/wazuh.repo")
+    )
+    repository_before = _read_optional_privileged(runner, repository_path)
+    apt_keyring_preexisting = (
+        _privileged_exists(runner, Path("/usr/share/keyrings/wazuh.gpg"))
+        if package_manager.family == "apt"
+        else None
+    )
 
     installed = package_manager.install_wazuh(wazuh_version)
 
@@ -983,15 +999,47 @@ def initialize(
     _render_ossec_config(snapshot.ossec_conf)
     _render_windows_rule_testing(snapshot.windows_rules)
 
+    ossec_backup = OSSEC_CONF.with_name("ossec.conf.wazuhdevenv.bak")
+    windows_backup = WINDOWS_RULES.with_name(
+        WINDOWS_RULES.name + ".wazuhdevenv.bak"
+    )
+    ossec_backup_preexisting = _privileged_exists(runner, ossec_backup)
+    windows_backup_preexisting = _privileged_exists(runner, windows_backup)
+    preexisting_fstab_entries = [
+        str(WAZUH_HOME / "etc" / name)
+        for name in ("rules", "decoders")
+        if _fstab_has_entry(
+            runner,
+            (workspace / name).resolve(),
+            WAZUH_HOME / "etc" / name,
+        )
+    ]
+
+    group_membership_added = ensure_group_membership(runner, user)
+
     state.update(
         {
             "workspace": str(workspace),
             "wazuh_home": str(WAZUH_HOME),
             "wazuh_version": installed,
+            "provisioning": {
+                "wazuh_installed_by_tool": wazuh_installed_by_tool,
+                "workspace_venv_created_by_tool": workspace_venv_created_by_tool,
+                "group_membership_added": group_membership_added,
+                "service_was_active": snapshot.service_was_active,
+                "service_was_enabled": snapshot.service_was_enabled,
+                "preexisting_mounts": sorted(
+                    str(path) for path in snapshot.preexisting_mounts
+                ),
+                "preexisting_fstab_entries": preexisting_fstab_entries,
+                "ossec_backup_preexisting": ossec_backup_preexisting,
+                "windows_backup_preexisting": windows_backup_preexisting,
+                "package_manager_family": package_manager.family,
+                "repository_before": repository_before,
+                "apt_keyring_preexisting": apt_keyring_preexisting,
+            },
         }
     )
-
-    ensure_group_membership(runner, user)
 
     try:
         stop_wazuh(runner)
