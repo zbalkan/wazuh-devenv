@@ -146,6 +146,16 @@ def test_prepare_package_directories_empties_and_restores_metadata() -> None:
                 return type("Result", (), {"returncode": 1})()
             return type("Result", (), {"returncode": 0})()
 
+        def capture(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+        ) -> str:
+            assert args == ["findmnt", "-rn", "-o", "TARGET"]
+            assert privileged is True
+            return ""
+
     uninstall._prepare_package_directories(FakeRunner())
 
     for target in (
@@ -197,6 +207,16 @@ def test_prepare_package_directories_creates_missing_target() -> None:
                 return type("Result", (), {"returncode": 1})()
             return type("Result", (), {"returncode": 0})()
 
+        def capture(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+        ) -> str:
+            assert args == ["findmnt", "-rn", "-o", "TARGET"]
+            assert privileged is True
+            return ""
+
     uninstall._prepare_package_directories(FakeRunner())
 
     for target in (
@@ -226,6 +246,87 @@ def test_prepare_package_directories_refuses_mounted_target() -> None:
         match="/var/ossec/etc/rules is still mounted",
     ):
         uninstall._prepare_package_directories(FakeRunner())
+
+
+def test_prepare_package_directories_preflights_both_targets_before_mutation() -> None:
+    commands: list[list[str]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert privileged is True
+            commands.append(args)
+            if args == ["mountpoint", "-q", "/var/ossec/etc/decoders"]:
+                assert check is False
+                return type("Result", (), {"returncode": 0})()
+            if args[0] == "mountpoint" or args[:2] == ["test", "-L"]:
+                return type("Result", (), {"returncode": 1})()
+            return type("Result", (), {"returncode": 0})()
+
+        def capture(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+        ) -> str:
+            assert args == ["findmnt", "-rn", "-o", "TARGET"]
+            assert privileged is True
+            return ""
+
+    with pytest.raises(
+        ConfigurationError,
+        match="/var/ossec/etc/decoders is still mounted",
+    ):
+        uninstall._prepare_package_directories(FakeRunner())
+
+    assert not any(
+        args[0] in {"find", "mkdir", "chown", "chmod"}
+        for args in commands
+    )
+
+
+def test_prepare_package_directories_refuses_nested_mount_before_mutation() -> None:
+    commands: list[list[str]] = []
+
+    class FakeRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ):
+            assert privileged is True
+            commands.append(args)
+            if args[0] == "mountpoint" or args[:2] == ["test", "-L"]:
+                return type("Result", (), {"returncode": 1})()
+            return type("Result", (), {"returncode": 0})()
+
+        def capture(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+        ) -> str:
+            assert args == ["findmnt", "-rn", "-o", "TARGET"]
+            assert privileged is True
+            return "/var/ossec/etc/rules/nested\n"
+
+    with pytest.raises(
+        ConfigurationError,
+        match="contains mounted content",
+    ):
+        uninstall._prepare_package_directories(FakeRunner())
+
+    assert not any(
+        args[0] in {"find", "mkdir", "chown", "chmod"}
+        for args in commands
+    )
 
 
 def test_remove_fstab_entries_preserves_unrelated_content(

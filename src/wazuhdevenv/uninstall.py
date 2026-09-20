@@ -310,7 +310,26 @@ def _detach_workspace(
     return removed
 
 
-def _prepare_package_directories(runner: CommandRunner) -> None:
+def _nested_mounts(
+    runner: CommandRunner,
+    target: Path,
+) -> list[Path]:
+    output = runner.capture(
+        ["findmnt", "-rn", "-o", "TARGET"],
+        privileged=True,
+    )
+    prefix = f"{target}/"
+    return [
+        Path(line)
+        for raw in output.splitlines()
+        if (line := raw.strip()).startswith(prefix)
+    ]
+
+
+def _preflight_package_directories(
+    runner: CommandRunner,
+) -> dict[Path, bool]:
+    states: dict[Path, bool] = {}
     for name in ("rules", "decoders"):
         target = WAZUH_HOME / "etc" / name
         if (
@@ -335,6 +354,14 @@ def _prepare_package_directories(runner: CommandRunner) -> None:
             raise ConfigurationError(
                 f"{target} is a symlink; refusing to prepare package removal"
             )
+
+        nested_mounts = _nested_mounts(runner, target)
+        if nested_mounts:
+            raise ConfigurationError(
+                f"{target} contains mounted content; refusing recursive cleanup: "
+                + ", ".join(str(path) for path in nested_mounts)
+            )
+
         exists = (
             runner.run(
                 ["test", "-e", str(target)],
@@ -343,18 +370,26 @@ def _prepare_package_directories(runner: CommandRunner) -> None:
             ).returncode
             == 0
         )
+        if exists and (
+            runner.run(
+                ["test", "-d", str(target)],
+                privileged=True,
+                check=False,
+            ).returncode
+            != 0
+        ):
+            raise ConfigurationError(
+                f"{target} is not a directory; refusing to prepare package removal"
+            )
+        states[target] = exists
+    return states
+
+
+def _prepare_package_directories(runner: CommandRunner) -> None:
+    states = _preflight_package_directories(runner)
+
+    for target, exists in states.items():
         if exists:
-            if (
-                runner.run(
-                    ["test", "-d", str(target)],
-                    privileged=True,
-                    check=False,
-                ).returncode
-                != 0
-            ):
-                raise ConfigurationError(
-                    f"{target} is not a directory; refusing to prepare package removal"
-                )
             runner.run(
                 [
                     "find",
@@ -377,7 +412,6 @@ def _prepare_package_directories(runner: CommandRunner) -> None:
 
         runner.run(["chown", "root:wazuh", str(target)], privileged=True)
         runner.run(["chmod", "0770", str(target)], privileged=True)
-
 
 def _preflight_restore(
     runner: CommandRunner,
