@@ -72,6 +72,94 @@ def test_update_command_uses_managed_lock_with_home_only(
 
 
 
+def test_init_help_does_not_advertise_reconciliation() -> None:
+    help_text = cli._parser().format_help()
+
+    assert "Provision a development workspace" in help_text
+    assert "reconcile" not in help_text
+
+
+def test_missing_workspace_venv_does_not_recommend_init(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    home = tmp_path / "managed"
+    home.mkdir()
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(cli.WazuhDevenvError) as exc_info:
+        cli._workspace_wazuhtester_version(_user(tmp_path), home)
+
+    message = str(exc_info.value)
+    assert "virtual environment is missing" in message
+    assert "wazuhdevenv update" in message
+    assert "wazuhdevenv init" not in message
+
+
+def test_missing_wazuhtester_does_not_recommend_init(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    python = workspace / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    home = tmp_path / "managed"
+    home.mkdir()
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
+        encoding="utf-8",
+    )
+
+    class FakeRunner:
+        def __init__(self, user: InvokingUser) -> None:
+            del user
+
+        def capture_as_user(self, args: list[str]) -> str:
+            del args
+            raise cli.WazuhDevenvError("missing package")
+
+    monkeypatch.setattr(cli, "CommandRunner", FakeRunner)
+
+    with pytest.raises(cli.WazuhDevenvError) as exc_info:
+        cli._workspace_wazuhtester_version(_user(tmp_path), home)
+
+    message = str(exc_info.value)
+    assert "wazuhtester is not installed" in message
+    assert "wazuhdevenv update" in message
+    assert "wazuhdevenv init" not in message
+
+
+def test_missing_wazuh_manager_does_not_recommend_init(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "managed"
+    home.mkdir()
+    (home / "state.json").write_text(
+        json.dumps({"schema_version": 1, "wazuh_version": "4.14.8"}) + "\n",
+        encoding="utf-8",
+    )
+
+    class FakePackageManager:
+        def __init__(self, runner: object) -> None:
+            del runner
+
+        def installed_version(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "PackageManager", FakePackageManager)
+
+    with pytest.raises(cli.WazuhDevenvError) as exc_info:
+        cli._installed_wazuh_version(_user(tmp_path), home)
+
+    message = str(exc_info.value)
+    assert "Wazuh Manager is not installed" in message
+    assert "wazuhdevenv update" in message
+    assert "wazuhdevenv init" not in message
+
+
 def test_configure_logging_refuses_symlinked_log_file(tmp_path: Path) -> None:
     home = tmp_path / "managed"
     logs = home / "logs"
