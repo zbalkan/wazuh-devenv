@@ -10,6 +10,7 @@ import wazuhdevenv.provisioning as provisioning
 from wazuhdevenv.errors import ConfigurationError
 from wazuhdevenv.paths import InvokingUser
 from wazuhdevenv.provisioning import PackageManager, ProvisioningSnapshot
+from wazuhdevenv.runner import CommandRunner
 
 
 class RecordingRunner:
@@ -347,6 +348,42 @@ def test_repository_setup_refuses_to_overwrite_custom_configuration(
             manager._set_rpm_repository_enabled(True)
 
 
+def test_package_manager_selection_uses_trusted_path() -> None:
+    class TrustedPathRunner:
+        def __init__(self) -> None:
+            self.lookups: list[str] = []
+
+        def trusted_which(self, command: str) -> str | None:
+            self.lookups.append(command)
+            if command == "dnf":
+                return "/usr/bin/dnf"
+            return None
+
+    runner = TrustedPathRunner()
+    manager = PackageManager(runner)  # type: ignore[arg-type]
+
+    assert manager.family == "rpm"
+    assert manager.command == "dnf"
+    assert runner.lookups == ["apt-get", "dnf"]
+
+
+def test_service_manager_uses_trusted_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lookups: list[str] = []
+
+    def trusted_which(command: str) -> str | None:
+        lookups.append(command)
+        if command == "service":
+            return "/usr/sbin/service"
+        return None
+
+    monkeypatch.setattr(CommandRunner, "trusted_which", staticmethod(trusted_which))
+
+    assert provisioning._service_manager() == "sysv"
+    assert lookups == ["systemctl", "service"]
+
+
 def test_removed_apt_wazuh_package_is_not_reported_as_installed() -> None:
     manager = _apt_manager(
         DpkgRunner(
@@ -389,9 +426,7 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
-def test_rpm_dependencies_accept_coreutils_single_commands(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_rpm_dependencies_accept_coreutils_single_commands() -> None:
     class RpmRunner:
         def __init__(self) -> None:
             self.installs: list[list[str]] = []
@@ -414,21 +449,21 @@ def test_rpm_dependencies_accept_coreutils_single_commands(
                 return SimpleNamespace(returncode=0)
             raise AssertionError(f"unexpected command: {args}")
 
+        def trusted_which(self, command: str) -> str | None:
+            return f"/usr/bin/{command}"
+
     runner = RpmRunner()
     manager = object.__new__(PackageManager)
     manager.runner = runner
     manager.family = "rpm"
     manager.command = "dnf"
-    monkeypatch.setattr(provisioning.shutil, "which", lambda command: f"/usr/bin/{command}")
 
     manager.ensure_system_dependencies()
 
     assert runner.installs == [["gnupg2"]]
 
 
-def test_rpm_dependencies_install_coreutils_when_commands_are_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_rpm_dependencies_install_coreutils_when_commands_are_missing() -> None:
     class RpmRunner:
         def __init__(self) -> None:
             self.installs: list[list[str]] = []
@@ -449,16 +484,14 @@ def test_rpm_dependencies_install_coreutils_when_commands_are_missing(
                 return SimpleNamespace(returncode=0)
             raise AssertionError(f"unexpected command: {args}")
 
+        def trusted_which(self, command: str) -> str | None:
+            return None if command == "install" else f"/usr/bin/{command}"
+
     runner = RpmRunner()
     manager = object.__new__(PackageManager)
     manager.runner = runner
     manager.family = "rpm"
     manager.command = "dnf"
-    monkeypatch.setattr(
-        provisioning.shutil,
-        "which",
-        lambda command: None if command == "install" else f"/usr/bin/{command}",
-    )
 
     manager.ensure_system_dependencies()
 

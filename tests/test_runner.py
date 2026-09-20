@@ -7,11 +7,28 @@ import pytest
 
 from wazuhdevenv.errors import CommandError
 from wazuhdevenv.paths import InvokingUser
-from wazuhdevenv.runner import CommandRunner
+from wazuhdevenv.runner import CommandRunner, TRUSTED_EXEC_PATH
 
 
 def _user(tmp_path: Path) -> InvokingUser:
     return InvokingUser("test", 1000, 1000, tmp_path)
+
+
+def test_trusted_which_uses_privileged_system_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_which(executable: str, path: str | None = None) -> str | None:
+        calls.append((executable, path))
+        if path == TRUSTED_EXEC_PATH:
+            return f"/usr/bin/{executable}"
+        return f"/home/test/bin/{executable}"
+
+    monkeypatch.setattr(shutil, "which", fake_which)
+
+    assert CommandRunner.trusted_which("install") == "/usr/bin/install"
+    assert calls == [("install", TRUSTED_EXEC_PATH)]
 
 
 def test_privileged_bare_command_uses_trusted_system_path(
