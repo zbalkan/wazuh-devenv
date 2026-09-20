@@ -128,13 +128,13 @@ class ProvisioningSnapshot:
 class PackageManager:
     def __init__(self, runner: CommandRunner) -> None:
         self.runner = runner
-        if shutil.which("apt-get"):
+        if runner.trusted_which("apt-get"):
             self.family = "apt"
             self.command = "apt-get"
-        elif shutil.which("dnf"):
+        elif runner.trusted_which("dnf"):
             self.family = "rpm"
             self.command = "dnf"
-        elif shutil.which("yum"):
+        elif runner.trusted_which("yum"):
             self.family = "rpm"
             self.command = "yum"
         else:
@@ -685,9 +685,9 @@ def configure_permissions(
 
 
 def _service_manager() -> str:
-    if shutil.which("systemctl") and Path("/run/systemd/system").exists():
+    if CommandRunner.trusted_which("systemctl") and Path("/run/systemd/system").exists():
         return "systemd"
-    if shutil.which("service"):
+    if CommandRunner.trusted_which("service"):
         return "sysv"
     raise UnsupportedPlatformError("supported service manager not found (systemd or service)")
 
