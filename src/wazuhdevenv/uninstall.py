@@ -1,10 +1,9 @@
-"""Safe teardown of a wazuhdevenv-managed environment."""
+"""Teardown for a wazuhdevenv-managed environment."""
 
 from __future__ import annotations
 
 import logging
 import shutil
-from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import ConfigurationError, WazuhDevenvError
@@ -43,45 +42,35 @@ RPM_REPOSITORY_PATH = Path("/etc/yum.repos.d/wazuh.repo")
 APT_KEYRING_PATH = Path("/usr/share/keyrings/wazuh.gpg")
 
 
-@dataclass(frozen=True)
-class UninstallResult:
-    workspace: Path
-    wazuh_removed: bool
-    legacy_state: bool
+def _required_state(home: Path) -> tuple[dict[str, object], Path, dict[str, object]]:
+    state = load_state(home)
+    workspace = state.get("workspace")
+    if not isinstance(workspace, str):
+        raise WazuhDevenvError("workspace is not initialized; nothing to uninstall")
 
-
-def _require_workspace(state: dict[str, object]) -> Path:
-    value = state.get("workspace")
-    if not isinstance(value, str):
-        raise WazuhDevenvError(
-            "workspace is not initialized; nothing to uninstall"
+    provenance = state.get("provisioning")
+    if not isinstance(provenance, dict):
+        raise ConfigurationError(
+            "state predates uninstall provenance tracking; automatic cleanup "
+            "would have to guess what wazuhdevenv created"
         )
-    return Path(value)
+    return state, Path(workspace), provenance
 
 
-def _metadata(state: dict[str, object]) -> tuple[dict[str, object], bool]:
-    value = state.get("provisioning")
-    if isinstance(value, dict):
-        return value, False
-    LOG.warning(
-        "State predates uninstall provenance tracking; Wazuh Manager and "
-        "workspace virtual environment will be preserved."
-    )
-    return {}, True
-
-
-def _target(name: str) -> Path:
-    return WAZUH_HOME / "etc" / name
+def _targets(values: object) -> set[Path]:
+    if not isinstance(values, list):
+        return set()
+    return {Path(value) for value in values if isinstance(value, str)}
 
 
 def _preflight_mounts(
     runner: CommandRunner,
     workspace: Path,
-    preexisting_mounts: set[Path],
+    preexisting: set[Path],
 ) -> None:
     for name in ("rules", "decoders"):
-        target = _target(name)
-        if target in preexisting_mounts:
+        target = WAZUH_HOME / "etc" / name
+        if target in preexisting:
             continue
         if (
             runner.run(
@@ -92,66 +81,56 @@ def _preflight_mounts(
             != 0
         ):
             continue
-        source = (workspace / name).resolve()
-        if not _same_bind_mount(runner, source, target):
+        if not _same_bind_mount(runner, (workspace / name).resolve(), target):
             raise ConfigurationError(
                 f"{target} is mounted from unexpected content; refusing to unmount it"
             )
 
 
-def _remove_managed_mounts(
+def _remove_mounts(
     runner: CommandRunner,
     workspace: Path,
-    preexisting_mounts: set[Path],
+    preexisting: set[Path],
 ) -> None:
     for name in reversed(("rules", "decoders")):
-        target = _target(name)
-        if target in preexisting_mounts:
+        target = WAZUH_HOME / "etc" / name
+        if target in preexisting:
             continue
-        source = (workspace / name).resolve()
-        if _same_bind_mount(runner, source, target):
+        if _same_bind_mount(runner, (workspace / name).resolve(), target):
             runner.run(["umount", str(target)], privileged=True)
 
 
-def _remove_managed_fstab_entries(
+def _remove_fstab_entries(
     runner: CommandRunner,
     workspace: Path,
-    preexisting_targets: set[Path],
+    preexisting: set[Path],
 ) -> None:
     path = Path("/etc/fstab")
     text = _read_optional_privileged(runner, path)
     if text is None:
         return
 
-    managed: dict[Path, str] = {}
-    for name in ("rules", "decoders"):
-        target = _target(name)
-        if target in preexisting_targets:
-            continue
-        source = (workspace / name).resolve()
-        managed[target] = f"{source} {target} none bind 0 0"
+    expected = {
+        WAZUH_HOME / "etc" / name: (
+            f"{(workspace / name).resolve()} "
+            f"{WAZUH_HOME / 'etc' / name} none bind 0 0"
+        )
+        for name in ("rules", "decoders")
+        if WAZUH_HOME / "etc" / name not in preexisting
+    }
 
-    if not managed:
-        return
-
-    changed = False
     output: list[str] = []
+    changed = False
     for raw in text.splitlines(keepends=True):
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
+        line = raw.strip()
+        fields = line.split()
+        target = Path(fields[1]) if len(fields) >= 2 and not line.startswith("#") else None
+        if target not in expected:
             output.append(raw)
             continue
-
-        fields = stripped.split()
-        target = Path(fields[1]) if len(fields) >= 2 else None
-        if target not in managed:
-            output.append(raw)
-            continue
-
-        if stripped != managed[target]:
+        if line != expected[target]:
             raise ConfigurationError(
-                f"fstab entry for {target} changed since initialization; "
-                "refusing to remove it"
+                f"fstab entry for {target} changed since initialization"
             )
         changed = True
 
@@ -166,26 +145,16 @@ def _preflight_restore(
     render,
 ) -> None:
     if not _privileged_exists(runner, backup):
-        raise ConfigurationError(
-            f"required pre-initialization backup is missing: {backup}"
-        )
+        raise ConfigurationError(f"required backup is missing: {backup}")
     original = runner.capture(["cat", str(backup)], privileged=True)
-    expected = render(original)
     current = runner.capture(["cat", str(target)], privileged=True)
-    if current != expected:
+    if current != render(original):
         raise ConfigurationError(
-            f"{target} changed after wazuhdevenv initialization; "
-            "refusing to overwrite later changes"
+            f"{target} changed after initialization; refusing to overwrite it"
         )
 
 
-def _restore_backup(
-    runner: CommandRunner,
-    target: Path,
-    backup: Path,
-    *,
-    remove_backup: bool,
-) -> None:
+def _restore_backup(runner: CommandRunner, target: Path, backup: Path) -> None:
     runner.run(
         [
             "cp",
@@ -195,8 +164,6 @@ def _restore_backup(
         ],
         privileged=True,
     )
-    if remove_backup:
-        runner.run(["rm", "-f", str(backup)], privileged=True)
 
 
 def _cleanup_workspace_access(
@@ -209,13 +176,7 @@ def _cleanup_workspace_access(
             path = workspace / name
             if path.is_dir() and not path.is_symlink():
                 runner.run_as_user(
-                    [
-                        "setfacl",
-                        "-d",
-                        "-x",
-                        "u:wazuh,g:wazuh",
-                        str(path),
-                    ],
+                    ["setfacl", "-d", "-x", "u:wazuh,g:wazuh", str(path)],
                     check=False,
                 )
 
@@ -244,92 +205,70 @@ def _cleanup_workspace_access(
 def _remove_group_membership(
     runner: CommandRunner,
     user: InvokingUser,
-    *,
-    added_by_tool: bool,
+    provenance: dict[str, object],
 ) -> None:
-    if not added_by_tool:
+    if provenance.get("group_membership_added") is not True:
         return
-    if runner.run(["getent", "group", "wazuh"], check=False).returncode != 0:
-        return
-    runner.run(["gpasswd", "-d", user.name, "wazuh"], privileged=True)
+    if runner.run(["getent", "group", "wazuh"], check=False).returncode == 0:
+        runner.run(["gpasswd", "-d", user.name, "wazuh"], privileged=True)
 
 
-def _repository_path(family: str) -> Path:
-    return APT_REPOSITORY_PATH if family == "apt" else RPM_REPOSITORY_PATH
+def _remove_wazuh(runner: CommandRunner, package_manager: PackageManager) -> None:
+    if package_manager.installed_version() is not None:
+        if package_manager.family == "apt":
+            runner.run(
+                ["apt-get", "remove", "--purge", "wazuh-manager", "-y"],
+                privileged=True,
+            )
+        else:
+            runner.run(
+                [package_manager.command, "-y", "remove", "wazuh-manager"],
+                privileged=True,
+            )
 
-
-def _managed_repository_contents(family: str) -> set[str]:
-    if family == "apt":
-        return {APT_REPOSITORY, f"#{APT_REPOSITORY}"}
-    return {
-        RPM_REPOSITORY.format(enabled=0),
-        RPM_REPOSITORY.format(enabled=1),
-    }
-
-
-def _preflight_repository(
-    runner: CommandRunner,
-    family: str,
-    repository_before: object,
-) -> None:
-    path = _repository_path(family)
-    current = _read_optional_privileged(runner, path)
-    if current is None:
-        return
-    if current not in _managed_repository_contents(family):
-        raise ConfigurationError(
-            f"Wazuh repository configuration changed since initialization: {path}"
-        )
-    if repository_before is not None and not isinstance(repository_before, str):
-        raise ConfigurationError("invalid repository provenance in state.json")
+    runner.run(["rm", "-rf", str(WAZUH_HOME)], privileged=True)
 
 
 def _restore_repository(
     runner: CommandRunner,
-    family: str,
-    repository_before: object,
+    package_manager: PackageManager,
+    before: object,
 ) -> None:
-    path = _repository_path(family)
+    path = (
+        APT_REPOSITORY_PATH
+        if package_manager.family == "apt"
+        else RPM_REPOSITORY_PATH
+    )
     current = _read_optional_privileged(runner, path)
+    managed = (
+        {APT_REPOSITORY, f"#{APT_REPOSITORY}"}
+        if package_manager.family == "apt"
+        else {
+            RPM_REPOSITORY.format(enabled=0),
+            RPM_REPOSITORY.format(enabled=1),
+        }
+    )
 
-    if repository_before is None:
+    if current is not None and current not in managed:
+        LOG.warning("Leaving modified Wazuh repository configuration in place: %s", path)
+        return
+
+    if before is None:
         if current is not None:
             runner.run(["rm", "-f", str(path)], privileged=True)
-    else:
-        if not isinstance(repository_before, str):
-            raise ConfigurationError("invalid repository provenance in state.json")
+    elif isinstance(before, str):
         if current is None:
-            _write_privileged(runner, path, repository_before)
-        elif current != repository_before:
-            _rewrite_preserving_metadata(runner, path, repository_before)
+            _write_privileged(runner, path, before)
+        elif current != before:
+            _rewrite_preserving_metadata(runner, path, before)
+    else:
+        raise ConfigurationError("invalid repository provenance in state.json")
 
-    if family == "apt":
+    if package_manager.family == "apt":
         runner.run(["apt-get", "update"], privileged=True)
 
 
-def _remove_wazuh(
-    runner: CommandRunner,
-    package_manager: PackageManager,
-) -> None:
-    if package_manager.installed_version() is None:
-        return
-    if package_manager.family == "apt":
-        runner.run(
-            ["apt-get", "remove", "--purge", "wazuh-manager", "-y"],
-            privileged=True,
-        )
-    else:
-        runner.run(
-            [package_manager.command, "-y", "remove", "wazuh-manager"],
-            privileged=True,
-        )
-
-    # Package managers may leave files created after installation, including
-    # wazuhdevenv backups. The whole tree is tool-owned when we installed Wazuh.
-    runner.run(["rm", "-rf", str(WAZUH_HOME)], privileged=True)
-
-
-def _restore_service_state(
+def _restore_service(
     runner: CommandRunner,
     *,
     was_active: bool,
@@ -339,60 +278,25 @@ def _restore_service_state(
         start_wazuh(runner, enable=was_enabled)
         wait_for_logtest(runner)
         return
-
-    stop_wazuh(runner)
-    if was_enabled is None:
-        return
-    action = "enable" if was_enabled else "disable"
-    runner.run(
-        ["systemctl", action, "wazuh-manager"],
-        privileged=True,
-    )
+    if was_enabled is not None:
+        action = "enable" if was_enabled else "disable"
+        runner.run(["systemctl", action, "wazuh-manager"], privileged=True)
 
 
-def uninstall_environment(
-    home: Path,
-    user: InvokingUser,
-) -> UninstallResult:
-    state = load_state(home)
-    workspace = _require_workspace(state)
-    metadata, legacy_state = _metadata(state)
-
+def uninstall_environment(home: Path, user: InvokingUser) -> Path:
+    _, workspace, provenance = _required_state(home)
     runner = CommandRunner(user)
     package_manager = PackageManager(runner)
 
-    installed_by_tool = bool(metadata.get("wazuh_installed_by_tool", False))
-    preexisting_mounts = {
-        Path(value)
-        for value in metadata.get("preexisting_mounts", [])
-        if isinstance(value, str)
-    }
-    preexisting_fstab = {
-        Path(value)
-        for value in metadata.get("preexisting_fstab_entries", [])
-        if isinstance(value, str)
-    }
+    installed_by_tool = provenance.get("wazuh_installed_by_tool") is True
+    preexisting_mounts = _targets(provenance.get("preexisting_mounts"))
+    preexisting_fstab = _targets(provenance.get("preexisting_fstab_entries"))
 
     _preflight_mounts(runner, workspace, preexisting_mounts)
 
-    repository_before = metadata.get("repository_before")
-    family = metadata.get("package_manager_family")
-    if installed_by_tool:
-        if family not in {"apt", "rpm"}:
-            raise ConfigurationError(
-                "missing package-manager provenance; refusing to remove Wazuh Manager"
-            )
-        if family != package_manager.family:
-            raise ConfigurationError(
-                "package manager differs from initialization; refusing to remove Wazuh Manager"
-            )
-        _preflight_repository(runner, family, repository_before)
-    else:
+    if not installed_by_tool:
         _preflight_restore(
-            runner,
-            OSSEC_CONF,
-            OSSEC_BACKUP,
-            _render_ossec_config,
+            runner, OSSEC_CONF, OSSEC_BACKUP, _render_ossec_config
         )
         _preflight_restore(
             runner,
@@ -401,63 +305,38 @@ def uninstall_environment(
             _render_windows_rule_testing,
         )
 
-    if legacy_state:
-        service_was_active = is_wazuh_active(runner)
-        service_was_enabled = is_wazuh_enabled(runner)
-    else:
-        active_value = metadata.get("service_was_active")
-        enabled_value = metadata.get("service_was_enabled")
-        if not isinstance(active_value, bool):
-            raise ConfigurationError("invalid service-state provenance in state.json")
-        if enabled_value is not None and not isinstance(enabled_value, bool):
-            raise ConfigurationError("invalid service-state provenance in state.json")
-        service_was_active = active_value
-        service_was_enabled = enabled_value
+    service_was_active = is_wazuh_active(runner)
+    service_was_enabled = is_wazuh_enabled(runner)
 
     stop_wazuh(runner)
-    _remove_managed_mounts(runner, workspace, preexisting_mounts)
-    _remove_managed_fstab_entries(runner, workspace, preexisting_fstab)
+    _remove_fstab_entries(runner, workspace, preexisting_fstab)
+    _remove_mounts(runner, workspace, preexisting_mounts)
     _cleanup_workspace_access(runner, workspace, user)
-    _remove_group_membership(
-        runner,
-        user,
-        added_by_tool=bool(metadata.get("group_membership_added", False)),
-    )
+    _remove_group_membership(runner, user, provenance)
 
     if installed_by_tool:
         _remove_wazuh(runner, package_manager)
-        _restore_repository(runner, family, repository_before)
+        _restore_repository(
+            runner,
+            package_manager,
+            provenance.get("repository_before"),
+        )
         if (
-            family == "apt"
-            and metadata.get("apt_keyring_preexisting") is False
+            package_manager.family == "apt"
+            and provenance.get("apt_keyring_preexisting") is False
             and _privileged_exists(runner, APT_KEYRING_PATH)
         ):
-            runner.run(
-                ["rm", "-f", str(APT_KEYRING_PATH)],
-                privileged=True,
-            )
+            runner.run(["rm", "-f", str(APT_KEYRING_PATH)], privileged=True)
     else:
-        _restore_backup(
-            runner,
-            OSSEC_CONF,
-            OSSEC_BACKUP,
-            remove_backup=not bool(metadata.get("ossec_backup_preexisting", True)),
-        )
-        _restore_backup(
-            runner,
-            WINDOWS_RULES,
-            WINDOWS_RULES_BACKUP,
-            remove_backup=not bool(
-                metadata.get("windows_backup_preexisting", True)
-            ),
-        )
-        _restore_service_state(
+        _restore_backup(runner, OSSEC_CONF, OSSEC_BACKUP)
+        _restore_backup(runner, WINDOWS_RULES, WINDOWS_RULES_BACKUP)
+        _restore_service(
             runner,
             was_active=service_was_active,
             was_enabled=service_was_enabled,
         )
 
-    if bool(metadata.get("workspace_venv_created_by_tool", False)):
+    if provenance.get("workspace_venv_created_by_tool") is True:
         venv = workspace / ".venv"
         if venv.is_symlink():
             raise ConfigurationError(
@@ -466,8 +345,4 @@ def uninstall_environment(
         if venv.exists():
             shutil.rmtree(venv)
 
-    return UninstallResult(
-        workspace=workspace,
-        wazuh_removed=installed_by_tool,
-        legacy_state=legacy_state,
-    )
+    return workspace
