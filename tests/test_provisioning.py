@@ -821,14 +821,28 @@ def test_start_wazuh_uses_sysv_start(
     assert ["service", "wazuh-manager", "restart"] not in runner.commands
 
 
-def test_logtest_timeout_reports_troubleshooting_commands() -> None:
+@pytest.mark.parametrize(
+    ("manager", "expected"),
+    [
+        ("systemd", "systemctl status wazuh-manager"),
+        ("sysv", "service wazuh-manager status"),
+    ],
+)
+def test_logtest_timeout_reports_service_manager_troubleshooting(
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(provisioning, "_service_manager", lambda: manager)
+
     with pytest.raises(ConfigurationError) as exc_info:
         provisioning.wait_for_logtest(RecordingRunner(), timeout=0)
 
     message = str(exc_info.value)
-    assert "systemctl status wazuh-manager" in message
-    assert "journalctl -u wazuh-manager" in message
+    assert expected in message
     assert "/var/ossec/queue/sockets" in message
+    if manager == "systemd":
+        assert "journalctl -u wazuh-manager" in message
 
 
 def test_initialize_rolls_back_when_state_persistence_fails(
