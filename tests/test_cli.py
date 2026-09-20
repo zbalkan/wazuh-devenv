@@ -299,18 +299,12 @@ def test_uninstall_command_uses_lock_and_removes_managed_home(
         lock_calls.append(path)
         yield
 
-    class Result:
-        legacy_state = False
-
-        def __init__(self, path: Path) -> None:
-            self.workspace = path
-
     monkeypatch.setattr(cli, "managed_lock", fake_lock)
     monkeypatch.setattr(
         cli,
         "uninstall_environment",
         lambda path, invoking_user: (
-            Result(workspace)
+            workspace
             if path == home and invoking_user == user
             else None
         ),
