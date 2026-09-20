@@ -323,13 +323,19 @@ def uninstall_environment(home: Path, user: InvokingUser) -> Path:
         )
         if (
             package_manager.family == "apt"
+            and provenance.get("repository_before") is None
             and provenance.get("apt_keyring_preexisting") is False
+            and _read_optional_privileged(runner, APT_REPOSITORY_PATH) is None
             and _privileged_exists(runner, APT_KEYRING_PATH)
         ):
             runner.run(["rm", "-f", str(APT_KEYRING_PATH)], privileged=True)
     else:
         _restore_backup(runner, OSSEC_CONF, OSSEC_BACKUP)
         _restore_backup(runner, WINDOWS_RULES, WINDOWS_RULES_BACKUP)
+        if provenance.get("ossec_backup_preexisting") is False:
+            runner.run(["rm", "-f", str(OSSEC_BACKUP)], privileged=True)
+        if provenance.get("windows_backup_preexisting") is False:
+            runner.run(["rm", "-f", str(WINDOWS_RULES_BACKUP)], privileged=True)
         _restore_service(
             runner,
             was_active=service_was_active,
