@@ -460,6 +460,11 @@ def test_missing_trusted_rpm_query_is_reported() -> None:
         def trusted_which(self, command: str) -> str | None:
             return None
 
+        def capture(self, args: list[str], *, privileged: bool = False) -> str:
+            raise AssertionError(
+                f"package query must not run when trusted rpm is missing: {args}, {privileged}"
+            )
+
     manager = object.__new__(PackageManager)
     manager.runner = MissingRpmRunner()
     manager.family = "rpm"
