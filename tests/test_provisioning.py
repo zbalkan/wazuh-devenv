@@ -314,6 +314,28 @@ def test_apt_dependency_probe_reinstalls_config_files_state() -> None:
     assert installed == [["python3-venv"]]
 
 
+def test_group_membership_already_present_skips_usermod() -> None:
+    class GroupRunner:
+        def __init__(self) -> None:
+            self.commands: list[list[str]] = []
+
+        def capture(self, args: list[str], **kwargs: object) -> str:
+            del args, kwargs
+            return "tester wazuh\n"
+
+        def run(self, args: list[str], **kwargs: object) -> SimpleNamespace:
+            del kwargs
+            self.commands.append(args)
+            return SimpleNamespace(returncode=0)
+
+    runner = GroupRunner()
+    user = InvokingUser("tester", 1000, 1000, Path("/home/tester"))
+
+    provisioning.ensure_group_membership(runner, user)
+
+    assert runner.commands == []
+
+
 def test_group_membership_is_added_and_verified() -> None:
     class GroupRunner:
         def __init__(self) -> None:
