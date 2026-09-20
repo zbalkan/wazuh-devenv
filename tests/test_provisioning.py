@@ -320,7 +320,8 @@ def test_group_membership_already_present_skips_usermod() -> None:
             self.commands: list[list[str]] = []
 
         def capture(self, args: list[str], **kwargs: object) -> str:
-            del args, kwargs
+            assert args == ["id", "-nG", "tester"]
+            assert kwargs == {"privileged": True}
             return "tester wazuh\n"
 
         def run(self, args: list[str], **kwargs: object) -> SimpleNamespace:
