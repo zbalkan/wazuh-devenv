@@ -587,6 +587,23 @@ def configure_bind_mounts(
         _ensure_fstab(runner, source, target)
 
 
+def ensure_group_membership(runner: CommandRunner, user: InvokingUser) -> None:
+    groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
+    if "wazuh" in groups:
+        return
+    runner.run(["usermod", "-a", "-G", "wazuh", user.name], privileged=True)
+    groups = runner.capture(["id", "-nG", user.name], privileged=True).split()
+    if "wazuh" not in groups:
+        raise ConfigurationError(
+            f"failed to add {user.name} to the wazuh group"
+        )
+    LOG.info(
+        "Added %s to the wazuh group. Start a new login session before using "
+        "Wazuh tools without sudo.",
+        user.name,
+    )
+
+
 def configure_permissions(
     runner: CommandRunner,
     workspace: Path,
@@ -847,6 +864,7 @@ def initialize(
     )
 
     try:
+        ensure_group_membership(runner, user)
         stop_wazuh(runner)
         configure_ossec(runner)
         configure_windows_rule_testing(runner)
