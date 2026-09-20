@@ -207,7 +207,7 @@ class PackageManager:
         ]
 
         coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "rm", "stat", "test")
-        if any(shutil.which(command) is None for command in coreutils_commands):
+        if any(self.runner.trusted_which(command) is None for command in coreutils_commands):
             missing.append("coreutils")
         if missing:
             self.runner.run(
