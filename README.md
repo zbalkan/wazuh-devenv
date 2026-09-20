@@ -235,16 +235,20 @@ The command is ownership-aware. It removes only state that can be attributed to
 `wazuhdevenv`, restores pre-existing Wazuh state where provenance is available,
 and refuses to overwrite Wazuh configuration that changed after initialization.
 
-For a normal environment created by current versions, teardown follows a strict
-order when Wazuh Manager was installed by `wazuhdevenv`: stop Wazuh Manager,
-unmount the managed `rules` and `decoders` directories and verify that they
-are no longer mount points, remove the matching `/etc/fstab` entries, empty the underlying
+For a normal environment created by current versions, teardown first validates
+the managed mount state, the exact `/etc/fstab` entries, and package-directory
+safety before changing host state. When Wazuh Manager was installed by
+`wazuhdevenv`, an active bind mount that predates initialization causes a safe
+refusal before Wazuh is stopped or workspace access is changed. After preflight,
+the command stops Wazuh Manager, unmounts the managed `rules` and `decoders`
+directories and verifies that they are no longer mount points, removes the
+matching `/etc/fstab` entries, verifies that neither package directory nor any
+content below it is mounted, empties the underlying
 `/var/ossec/etc/rules` and `/var/ossec/etc/decoders` package directories
-while preserving the directories themselves, restore their expected
+while preserving the directories themselves, restores their expected
 `root:wazuh` ownership and `0770` mode (creating them only if missing),
-uninstall the `wazuh-manager` package, and finally remove managed
-`wazuhdevenv` state. The package is never removed while the workspace bind
-mounts are still active.
+uninstalls the `wazuh-manager` package, and finally removes managed
+`wazuhdevenv` state.
 
 Uninstall also:
 
@@ -269,9 +273,11 @@ User content under `rules/`, `decoders/`, and `tests/` is always preserved.
 If a pre-existing workspace virtual environment was present, it is preserved as
 well.
 
-Uninstall always prints a final inventory with four sections: `Removed`,
-`Restored`, `Preserved`, and `Remnants`. The remnant list is deliberate;
-the command does not claim to return the host to an unknowable pristine state.
+On successful completion, uninstall prints a final inventory with four sections:
+`Removed`, `Restored`, `Preserved`, and `Remnants`. Preflight refusals
+return an error before teardown begins and therefore do not print a completion
+inventory. The remnant list is deliberate; the command does not claim to return
+the host to an unknowable pristine state.
 
 Known intentional remnants include the `wazuhdevenv` Python or pipx
 installation itself, which must be removed using the installer that installed
