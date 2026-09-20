@@ -235,7 +235,22 @@ The command is ownership-aware. It removes only state that can be attributed to
 `wazuhdevenv`, restores pre-existing Wazuh state where provenance is available,
 and refuses to overwrite Wazuh configuration that changed after initialization.
 
-For a normal environment created by current versions, uninstall:
+For a normal environment created by current versions, teardown first validates
+the managed mount state, the exact `/etc/fstab` entries, and package-directory
+safety before changing host state. When Wazuh Manager was installed by
+`wazuhdevenv`, an active bind mount that predates initialization causes a safe
+refusal before Wazuh is stopped or workspace access is changed. After preflight,
+the command stops Wazuh Manager, unmounts the managed `rules` and `decoders`
+directories and verifies that they are no longer mount points, removes the
+matching `/etc/fstab` entries, verifies that neither package directory nor any
+content below it is mounted, empties the underlying
+`/var/ossec/etc/rules` and `/var/ossec/etc/decoders` package directories
+while preserving the directories themselves, restores their expected
+`root:wazuh` ownership and `0770` mode (creating them only if missing),
+uninstalls the `wazuh-manager` package, and finally removes managed
+`wazuhdevenv` state.
+
+Uninstall also:
 
 - unmounts the managed `rules` and `decoders` bind mounts;
 - removes only the exact matching entries added to `/etc/fstab`;
@@ -258,13 +273,17 @@ User content under `rules/`, `decoders/`, and `tests/` is always preserved.
 If a pre-existing workspace virtual environment was present, it is preserved as
 well.
 
-Uninstall always prints a final inventory with four sections: `Removed`,
-`Restored`, `Preserved`, and `Remnants`. The remnant list is deliberate;
-the command does not claim to return the host to an unknowable pristine state.
+On successful completion, uninstall prints a final inventory with four sections:
+`Removed`, `Restored`, `Preserved`, and `Remnants`. Preflight refusals
+return an error before teardown begins and therefore do not print a completion
+inventory. The remnant list is deliberate; the command does not claim to return
+the host to an unknowable pristine state.
 
 Known intentional remnants include the `wazuhdevenv` Python or pipx
 installation itself, which must be removed using the installer that installed
-the CLI. System prerequisite packages installed during provisioning are also
+the CLI. A small sibling lock file is also retained outside the managed state
+directory so concurrent commands remain serialized while that directory is
+deleted. System prerequisite packages installed during provisioning are also
 retained because they may have acquired other consumers; current state records
 the exact package names so uninstall can report them. Package-manager cache and
 metadata changes made by APT, DNF, or YUM are not rolled back.
