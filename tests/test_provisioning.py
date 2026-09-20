@@ -353,6 +353,98 @@ def test_repository_setup_refuses_to_overwrite_custom_configuration(
             manager._set_rpm_repository_enabled(True)
 
 
+def test_failed_apt_wazuh_install_disables_repository() -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = object()
+    events: list[object] = []
+
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_apt_repository = lambda: events.append("enable")  # type: ignore[method-assign]
+
+    def fail_install(packages: list[str]) -> None:
+        events.append(("install", packages))
+        raise RuntimeError("install failed")
+
+    manager._apt_install = fail_install  # type: ignore[method-assign]
+    manager._set_apt_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == [
+        "enable",
+        ("install", ["wazuh-manager=4.14.8-1"]),
+        ("repository", False),
+    ]
+
+
+def test_failed_rpm_wazuh_install_disables_repository() -> None:
+    events: list[object] = []
+
+    class FailingRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            privileged: bool = False,
+            check: bool = True,
+        ) -> SimpleNamespace:
+            del check
+            assert privileged is True
+            events.append(("install", args))
+            raise RuntimeError("install failed")
+
+    manager = object.__new__(PackageManager)
+    manager.family = "rpm"
+    manager.command = "dnf"
+    manager.runner = FailingRunner()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_rpm_repository = lambda: events.append("enable")  # type: ignore[method-assign]
+    manager._set_rpm_repository_enabled = (  # type: ignore[method-assign]
+        lambda enabled: events.append(("repository", enabled))
+    )
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        manager.install_wazuh("4.14.8")
+
+    assert events == [
+        "enable",
+        ("install", ["dnf", "-y", "install", "wazuh-manager-4.14.8-1"]),
+        ("repository", False),
+    ]
+
+
+def test_repository_cleanup_failure_does_not_hide_install_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manager = object.__new__(PackageManager)
+    manager.family = "apt"
+    manager.command = "apt-get"
+    manager.runner = object()
+    manager.installed_version = lambda: None  # type: ignore[method-assign]
+    manager._setup_apt_repository = lambda: None  # type: ignore[method-assign]
+
+    def fail_install(packages: list[str]) -> None:
+        del packages
+        raise ValueError("original install failure")
+
+    def fail_cleanup(enabled: bool) -> None:
+        assert enabled is False
+        raise RuntimeError("cleanup failure")
+
+    manager._apt_install = fail_install  # type: ignore[method-assign]
+    manager._set_apt_repository_enabled = fail_cleanup  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="original install failure"):
+        manager.install_wazuh(None)
+
+    assert "cleanup failure" in caplog.text
+
+
 def test_package_manager_selection_uses_trusted_path() -> None:
     class TrustedPathRunner:
         def __init__(self) -> None:
