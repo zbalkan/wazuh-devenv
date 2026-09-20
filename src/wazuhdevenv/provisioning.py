@@ -199,12 +199,16 @@ class PackageManager:
                 self._apt_install(missing)
             return
 
-        packages = ["python3", "util-linux", "coreutils", "findutils", "gnupg2"]
+        packages = ["python3", "util-linux", "findutils", "gnupg2"]
         missing = [
             package
             for package in packages
             if self.runner.run(["rpm", "-q", package], check=False).returncode != 0
         ]
+
+        coreutils_commands = ("cat", "chmod", "chown", "cp", "env", "id", "install", "stat", "test")
+        if any(shutil.which(command) is None for command in coreutils_commands):
+            missing.append("coreutils")
         if missing:
             self.runner.run(
                 [self.command, "-y", "install", *missing],
