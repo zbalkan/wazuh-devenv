@@ -2,7 +2,7 @@
 
 `wazuh-devenv` provisions and maintains a local Wazuh rule and decoder development environment.
 
-The project is moving from a cloned-repository/Bash workflow to an installable Python CLI. The CLI owns environment preparation; default Wazuh regression content is distributed independently by [wazuh-rule-tests](https://github.com/zbalkan/wazuh-rule-tests), and logtest communication is provided by [wazuhtester](https://github.com/zbalkan/wazuhtester).
+The installable Python CLI owns environment preparation; default Wazuh regression content is distributed independently by [wazuh-rule-tests](https://github.com/zbalkan/wazuh-rule-tests), and logtest communication is provided by [wazuhtester](https://github.com/zbalkan/wazuhtester).
 
 ## Architecture
 
@@ -55,7 +55,7 @@ An explicit workspace path is also accepted:
 wazuhdevenv init ~/projects/my-wazuh-rules
 ```
 
-`init` is a one-shot provisioning operation. After a successful initialization, any later `init` invocation fails immediately using the recorded state; it does not reconcile, repair, switch, or re-provision the environment. It currently performs the responsibilities previously implemented by `install.sh`:
+`init` is a one-shot provisioning operation. After a successful initialization, any later `init` invocation fails immediately using the recorded state; it does not reconcile, repair, switch, or re-provision the environment. It performs the following:
 
 - detects APT, DNF, or YUM;
 - installs or verifies Wazuh Manager;
@@ -233,10 +233,6 @@ python -m pytest
 ```
 
 The unit suite does not alter the host Wazuh installation.
-
-## Legacy scripts
-
-`install.sh`, `fix_permissions.sh`, and the old scripts under `src/` are retained temporarily while the Python CLI reaches integration parity. They are not the target architecture and will be removed after the new workflow is validated end-to-end.
 
 ## License
 
