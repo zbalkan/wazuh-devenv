@@ -78,7 +78,7 @@ wazuhdevenv init ~/projects/my-wazuh-rules
 - backs up and restores the Wazuh configuration, Windows testing rule, fstab entries, and newly created bind mounts if host configuration fails;
 - starts the manager and waits for a stable logtest socket;
 - initializes `~/.wazuhdevenv`;
-- downloads and validates the compatible default rule-test corpus unless `--skip-corpus` is specified; corpus failures are fatal and reported to the user.
+- downloads and validates the default rule-test corpus whose version exactly matches the installed Wazuh version unless `--skip-corpus` is specified; corpus failures are fatal and reported to the user.
 
 The CLI is intended to be run as the developer:
 
@@ -206,7 +206,7 @@ wazuhdevenv update
 
 1. detects the installed Wazuh version;
 2. reads `wazuh-rule-tests` GitHub Release manifests;
-3. selects the newest compatible corpus;
+3. selects the corpus whose `version` exactly matches the installed Wazuh version;
 4. downloads the ZIP and its SHA-256 checksum;
 5. verifies the digest;
 6. rejects unsafe ZIP paths, symlinks, and special files;
@@ -221,7 +221,7 @@ Check what would be selected without modifying state:
 wazuhdevenv update --check
 ```
 
-`update` does not upgrade Wazuh Manager, `wazuhdevenv`, `wazuhtester`, or user content.
+`update` does not upgrade Wazuh Manager, `wazuhdevenv`, `wazuhtester`, or user content. Corpus compatibility is exact: Wazuh `4.14.7` uses corpus `4.14.7`; a corpus for another Wazuh version is not selected.
 
 ## Uninstall the development environment
 

@@ -21,6 +21,7 @@ def _user(tmp_path: Path) -> InvokingUser:
 def test_update_command_resolves_and_updates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     check: bool,
 ) -> None:
     user = _user(tmp_path)
@@ -28,40 +29,36 @@ def test_update_command_resolves_and_updates(
     home.mkdir()
 
     release = CorpusRelease(
-        manifest={
-            "schema_version": 1,
-            "corpus_version": "4.14.8-r1",
-            "wazuh": {"requires": "==4.14.8"},
-        },
+        manifest={"version": "4.14.7"},
         manifest_url="manifest",
         archive_url="archive",
         checksum_url="checksum",
     )
-    resolve_calls: list[tuple[str, str]] = []
-    update_calls: list[tuple[Path, str, str]] = []
+    resolve_calls: list[str] = []
+    update_calls: list[tuple[Path, str]] = []
 
-    monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.8")
-    monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
+    monkeypatch.setattr(cli, "_installed_wazuh_version", lambda *args: "4.14.7")
     monkeypatch.setattr(
         cli,
         "resolve_release",
-        lambda version, tester: resolve_calls.append((version, tester)) or release,
+        lambda version: resolve_calls.append(version) or release,
     )
     monkeypatch.setattr(
         cli,
         "update_corpus",
-        lambda path, version, tester: (
-            update_calls.append((path, version, tester)) or "4.14.8-r1"
+        lambda path, version: (
+            update_calls.append((path, version)) or "4.14.7"
         ),
     )
 
     assert cli._update_command(argparse.Namespace(check=check), user, home) == 0
     if check:
-        assert resolve_calls == [("4.14.8", "0.1.0rc1")]
+        assert resolve_calls == ["4.14.7"]
         assert update_calls == []
+        assert capsys.readouterr().out == "4.14.7\n"
     else:
         assert resolve_calls == []
-        assert update_calls == [(home, "4.14.8", "0.1.0rc1")]
+        assert update_calls == [(home, "4.14.7")]
 
 
 
@@ -70,58 +67,6 @@ def test_init_help_does_not_advertise_reconciliation() -> None:
 
     assert "Provision a development workspace" in help_text
     assert "reconcile" not in help_text
-
-
-def test_missing_workspace_venv_does_not_recommend_init(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    home = tmp_path / "managed"
-    home.mkdir()
-    (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(cli.WazuhDevenvError) as exc_info:
-        cli._workspace_wazuhtester_version(_user(tmp_path), home)
-
-    message = str(exc_info.value)
-    assert "virtual environment is missing" in message
-    assert "wazuhdevenv update" in message
-    assert "wazuhdevenv init" not in message
-
-
-def test_missing_wazuhtester_does_not_recommend_init(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    python = workspace / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.touch()
-    home = tmp_path / "managed"
-    home.mkdir()
-    (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
-        encoding="utf-8",
-    )
-
-    class FakeRunner:
-        def __init__(self, user: InvokingUser) -> None:
-            del user
-
-        def capture_as_user(self, args: list[str]) -> str:
-            del args
-            raise cli.WazuhDevenvError("missing package")
-
-    monkeypatch.setattr(cli, "CommandRunner", FakeRunner)
-
-    with pytest.raises(cli.WazuhDevenvError) as exc_info:
-        cli._workspace_wazuhtester_version(_user(tmp_path), home)
-
-    message = str(exc_info.value)
-    assert "wazuhtester is not installed" in message
-    assert "wazuhdevenv update" in message
-    assert "wazuhdevenv init" not in message
 
 
 def test_missing_wazuh_manager_does_not_recommend_init(
@@ -168,40 +113,6 @@ def test_configure_logging_refuses_symlinked_log_file(tmp_path: Path) -> None:
 
 
 
-def test_workspace_wazuhtester_probe_uses_invoking_user_capture(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    python = workspace / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.touch()
-    home = tmp_path / "managed"
-    home.mkdir()
-    (home / "state.json").write_text(
-        json.dumps({"schema_version": 1, "workspace": str(workspace)}) + "\n",
-        encoding="utf-8",
-    )
-    calls: list[list[str]] = []
-    users: list[InvokingUser] = []
-    invoking_user = _user(tmp_path)
-
-    class FakeRunner:
-        def __init__(self, user: InvokingUser) -> None:
-            users.append(user)
-
-        def capture_as_user(self, args: list[str]) -> str:
-            calls.append(args)
-            return "0.1.0rc1\n"
-
-    monkeypatch.setattr(cli, "CommandRunner", FakeRunner)
-
-    assert cli._workspace_wazuhtester_version(invoking_user, home) == "0.1.0rc1"
-    assert users == [invoking_user]
-    assert calls and calls[0][0] == str(python)
-
-
-
 def test_init_propagates_corpus_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -211,8 +122,7 @@ def test_init_propagates_corpus_failure(
     home.mkdir()
 
     monkeypatch.setattr(cli, "resolve_workspace", lambda value: tmp_path / "workspace")
-    monkeypatch.setattr(cli, "initialize", lambda *args, **kwargs: "4.14.8")
-    monkeypatch.setattr(cli, "_workspace_wazuhtester_version", lambda *args: "0.1.0rc1")
+    monkeypatch.setattr(cli, "initialize", lambda *args, **kwargs: "4.14.7")
 
     def fail_corpus(*args: object, **kwargs: object) -> str:
         raise cli.CorpusError("release unavailable")

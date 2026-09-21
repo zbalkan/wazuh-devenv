@@ -39,11 +39,15 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument(
         "--skip-corpus",
         action="store_true",
-        help="Do not download the compatible default rule-test corpus",
+        help="Do not download the default rule-test corpus",
     )
 
     update = commands.add_parser("update", help="Install or refresh managed rule-test content")
-    update.add_argument("--check", action="store_true", help="Resolve the compatible corpus without installing it")
+    update.add_argument(
+        "--check",
+        action="store_true",
+        help="Resolve the corpus for the installed Wazuh version without installing it",
+    )
 
     commands.add_parser(
         "coverage",
@@ -80,28 +84,6 @@ def _configure_logging(home: Path, verbose: bool) -> None:
     logging.basicConfig(level=level, format="%(levelname)s %(message)s", handlers=handlers)
 
 
-def _workspace_wazuhtester_version(user: InvokingUser, home: Path) -> str:
-    state = load_state(home)
-    workspace_value = state.get("workspace")
-    if not isinstance(workspace_value, str):
-        raise WazuhDevenvError("workspace is not initialized; run 'wazuhdevenv init' first")
-    python = Path(workspace_value) / ".venv/bin/python"
-    if not python.is_file():
-        raise WazuhDevenvError(
-            f"workspace virtual environment is missing: {python}; "
-            "restore it before running 'wazuhdevenv update'"
-        )
-    runner = CommandRunner(user)
-    code = "from importlib.metadata import version; print(version('wazuhtester'))"
-    try:
-        return runner.capture_as_user([str(python), "-c", code]).strip()
-    except WazuhDevenvError as exc:
-        raise WazuhDevenvError(
-            "wazuhtester is not installed in the workspace virtual environment; "
-            "install it there, then run 'wazuhdevenv update'"
-        ) from exc
-
-
 def _installed_wazuh_version(user: InvokingUser, home: Path) -> str:
     state = load_state(home)
     recorded = state.get("wazuh_version")
@@ -128,9 +110,8 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
     )
     LOG.info("Wazuh Manager ready: %s", version)
     if not args.skip_corpus:
-        tester_version = _workspace_wazuhtester_version(user, home)
         try:
-            corpus = update_corpus(home, version, tester_version)
+            corpus = update_corpus(home, version)
         except CorpusError as exc:
             raise CorpusError(
                 "Wazuh initialization completed, but rule-test corpus installation failed. "
@@ -143,12 +124,11 @@ def _init_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> i
 
 def _update_command(args: argparse.Namespace, user: InvokingUser, home: Path) -> int:
     version = _installed_wazuh_version(user, home)
-    tester_version = _workspace_wazuhtester_version(user, home)
     if args.check:
-        release = resolve_release(version, tester_version)
-        print(f"{release.version} (Wazuh {release.manifest['wazuh']['requires']})")
+        release = resolve_release(version)
+        print(release.version)
         return 0
-    installed = update_corpus(home, version, tester_version)
+    installed = update_corpus(home, version)
     LOG.info("Managed rule-test corpus ready: %s", installed)
     return 0
 

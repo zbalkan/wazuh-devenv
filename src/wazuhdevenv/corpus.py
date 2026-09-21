@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import stat
-import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -17,14 +17,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from packaging.specifiers import SpecifierSet
-from packaging.version import InvalidVersion, Version
-
 from .errors import CorpusError
 from .state import load_state, save_state
 
 RELEASES_API = "https://api.github.com/repos/zbalkan/wazuh-rule-tests/releases?per_page=100"
 USER_AGENT = "wazuhdevenv"
+VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 @dataclass(frozen=True)
@@ -36,7 +34,7 @@ class CorpusRelease:
 
     @property
     def version(self) -> str:
-        return str(self.manifest["corpus_version"])
+        return str(self.manifest["version"])
 
 
 def _request(url: str, *, authenticated: bool = False) -> bytes:
@@ -56,19 +54,6 @@ def _request(url: str, *, authenticated: bool = False) -> bytes:
         raise CorpusError(f"failed to download {url}: {exc}") from exc
 
 
-def _release_key(value: str) -> tuple[Version, int]:
-    series, separator, revision = value.rpartition("-r")
-    if not separator or not revision.isdigit():
-        raise CorpusError(f"invalid corpus version: {value}")
-    try:
-        parsed = Version(series)
-    except InvalidVersion as exc:
-        raise CorpusError(f"invalid corpus version: {value}") from exc
-    if parsed.is_prerelease or parsed.is_devrelease:
-        raise CorpusError(f"invalid corpus version: {value}")
-    return parsed, int(revision)
-
-
 def _asset_url(release: dict[str, object], name: str) -> str | None:
     for asset in release.get("assets", []):
         if isinstance(asset, dict) and asset.get("name") == name:
@@ -77,87 +62,59 @@ def _asset_url(release: dict[str, object], name: str) -> str | None:
     return None
 
 
-def _matches_requirement(manifest: dict[str, object], section: str, version: str) -> bool:
-    value = manifest.get(section)
-    if not isinstance(value, dict) or not value.get("requires"):
-        return False
-    try:
-        return Version(version) in SpecifierSet(str(value["requires"]))
-    except Exception:
-        return False
+def resolve_release(wazuh_version: str) -> CorpusRelease:
+    if not VERSION.fullmatch(wazuh_version):
+        raise CorpusError(f"invalid Wazuh version: {wazuh_version}")
 
-
-def resolve_release(wazuh_version: str, wazuhtester_version: str) -> CorpusRelease:
     try:
         releases = json.loads(_request(RELEASES_API, authenticated=True))
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise CorpusError("GitHub returned invalid release metadata") from exc
     if not isinstance(releases, list):
         raise CorpusError("unexpected GitHub release response")
 
-    compatible: list[tuple[tuple[Version, int], CorpusRelease]] = []
-    current = Version(wazuh_version)
-    mismatch_counts = {"wazuh": 0, "python": 0, "wazuhtester": 0, "version": 0}
     inspected_manifests = 0
+    version_mismatches = 0
+    invalid_manifests = 0
 
     for release in releases:
         if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
             continue
+
         manifest_url = _asset_url(release, "manifest.json")
         if not manifest_url:
             continue
+
         try:
             manifest = json.loads(_request(manifest_url))
-        except (json.JSONDecodeError, CorpusError):
+        except (json.JSONDecodeError, UnicodeDecodeError, CorpusError):
+            invalid_manifests += 1
             continue
-        if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
-            continue
-        inspected_manifests += 1
-        if not _matches_requirement(manifest, "wazuh", str(current)):
-            mismatch_counts["wazuh"] += 1
-            continue
-        if not _matches_requirement(
-            manifest,
-            "python",
-            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        ):
-            mismatch_counts["python"] += 1
-            continue
-        if not _matches_requirement(manifest, "wazuhtester", wazuhtester_version):
-            mismatch_counts["wazuhtester"] += 1
+        if not isinstance(manifest, dict):
+            invalid_manifests += 1
             continue
 
-        version = str(manifest.get("corpus_version", ""))
-        try:
-            version_key = _release_key(version)
-        except CorpusError:
-            mismatch_counts["version"] += 1
+        inspected_manifests += 1
+        version = manifest.get("version")
+        if not isinstance(version, str) or not VERSION.fullmatch(version):
+            invalid_manifests += 1
+            continue
+        if version != wazuh_version:
+            version_mismatches += 1
             continue
 
         archive_url = _asset_url(release, f"wazuh-rule-tests-{version}.zip")
         checksum_url = _asset_url(release, f"wazuh-rule-tests-{version}.zip.sha256")
         if archive_url and checksum_url:
-            compatible.append(
-                (
-                    version_key,
-                    CorpusRelease(manifest, manifest_url, archive_url, checksum_url),
-                )
-            )
+            return CorpusRelease(manifest, manifest_url, archive_url, checksum_url)
 
-    if not compatible:
-        detail = (
-            f"inspected {inspected_manifests} manifests; "
-            f"Wazuh mismatches={mismatch_counts['wazuh']}, "
-            f"Python mismatches={mismatch_counts['python']}, "
-            f"wazuhtester mismatches={mismatch_counts['wazuhtester']}, "
-            f"invalid corpus versions={mismatch_counts['version']}"
-        )
-        raise CorpusError(
-            "no released rule-test corpus is compatible with "
-            f"Wazuh {wazuh_version}, Python {sys.version_info.major}.{sys.version_info.minor}, "
-            f"and wazuhtester {wazuhtester_version}; {detail}"
-        )
-    return max(compatible, key=lambda item: item[0])[1]
+        invalid_manifests += 1
+
+    raise CorpusError(
+        f"no released rule-test corpus exactly matches Wazuh {wazuh_version}; "
+        f"inspected {inspected_manifests} manifests; "
+        f"version mismatches={version_mismatches}, invalid releases={invalid_manifests}"
+    )
 
 
 def _verify_checksum(archive: Path, checksum_text: str) -> str:
@@ -217,12 +174,7 @@ def _atomic_symlink(link: Path, target: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def install_release(
-    home: Path,
-    release: CorpusRelease,
-    wazuh_version: str,
-    wazuhtester_version: str,
-) -> None:
+def install_release(home: Path, release: CorpusRelease) -> None:
     cache = home / "cache"
     corpora = home / "corpora"
     for directory in (cache, corpora):
@@ -267,9 +219,7 @@ def install_release(
         state = load_state(home)
         state.update(
             {
-                "wazuh_version": wazuh_version,
                 "active_corpus": release.version,
-                "wazuhtester_version": wazuhtester_version,
                 "corpus_installed_at": datetime.now(timezone.utc)
                 .replace(microsecond=0)
                 .isoformat(),
@@ -286,17 +236,8 @@ def install_release(
         raise
 
 
-def update_corpus(
-    home: Path,
-    wazuh_version: str,
-    wazuhtester_version: str,
-) -> str:
-    try:
-        release = resolve_release(wazuh_version, wazuhtester_version)
-    except CorpusError:
-        raise
-    except (UnicodeDecodeError, InvalidVersion) as exc:
-        raise CorpusError(f"failed to resolve rule-test corpus: {exc}") from exc
+def update_corpus(home: Path, wazuh_version: str) -> str:
+    release = resolve_release(wazuh_version)
 
     state = load_state(home)
     current = home / "current-corpus"
@@ -308,7 +249,7 @@ def update_corpus(
         return release.version
 
     try:
-        install_release(home, release, wazuh_version, wazuhtester_version)
+        install_release(home, release)
     except CorpusError:
         raise
     except (json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
